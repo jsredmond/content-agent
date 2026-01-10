@@ -55,7 +55,7 @@ def upload_file(
         # Load service account credentials
         credentials = service_account.Credentials.from_service_account_file(
             credentials_path,
-            scopes=["https://www.googleapis.com/auth/drive.file"]
+            scopes=["https://www.googleapis.com/auth/drive"]
         )
         
         # Build Drive service
@@ -77,11 +77,12 @@ def upload_file(
             resumable=True
         )
         
-        # Execute upload
+        # Execute upload (supportsAllDrives for Shared Drives)
         file = service.files().create(
             body=file_metadata,
             media_body=media,
-            fields="id"
+            fields="id",
+            supportsAllDrives=True
         ).execute()
         
         uploaded_file_id = file.get("id")
