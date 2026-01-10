@@ -201,7 +201,7 @@ def load_settings(env_path: str | Path | None = None, validate: bool = True) -> 
         load_dotenv()
 
     settings = Settings(
-        google_drive_folder_id=os.getenv("GOOGLE_DRIVE_FOLDER_ID", ""),
+        google_drive_folder_id=os.getenv("GOOGLE_DRIVE_FOLDER_ID") or os.getenv("GOOGLE_DRIVE_OUTPUT_FOLDER_ID", ""),
         max_articles_per_source=_parse_int(
             os.getenv("MAX_ARTICLES_PER_SOURCE"), 50
         ),
