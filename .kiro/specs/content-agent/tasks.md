@@ -6,7 +6,7 @@ This plan implements the Content Agent curation pipeline in Python, following th
 
 ## Tasks
 
-- [-] 1. Set up project structure and dependencies
+- [x] 1. Set up project structure and dependencies
   - Create directory structure: src/, src/agent/, src/config/, src/connectors/, src/engines/, src/output/, tests/
   - Create requirements.txt with core dependencies (requests, pandas, python-dotenv, beautifulsoup4, lxml, feedparser, python-dateutil, tenacity, tldextract, hypothesis, pytest, pytest-cov)
   - Create src/__init__.py and module __init__.py files
@@ -14,281 +14,281 @@ This plan implements the Content Agent curation pipeline in Python, following th
   - Git commit: `chore: set up project structure and dependencies`
   - _Requirements: 10.1, 10.2_
 
-- [ ] 2. Implement configuration management
-  - [ ] 2.1 Create src/config/settings.py with Settings dataclass and load_settings function
+- [x] 2. Implement configuration management
+  - [x] 2.1 Create src/config/settings.py with Settings dataclass and load_settings function
     - Define all configuration fields with defaults
     - Load from environment variables and .env file
     - Include keyword sets for relevance scoring themes
     - _Requirements: 10.1, 10.2, 10.3_
-  - [ ] 2.2 Write property test for configuration defaults
+  - [x] 2.2 Write property test for configuration defaults
     - **Property 23: Configuration Defaults**
     - **Validates: Requirements 10.3**
-  - [ ] 2.3 Write property test for configuration validation
+  - [x] 2.3 Write property test for configuration validation
     - **Property 24: Configuration Validation**
     - **Validates: Requirements 10.4**
-  - [ ] 2.4 Git commit
+  - [x] 2.4 Git commit
     - `feat: add configuration management with settings and validation`
 
-- [ ] 3. Implement data models
-  - [ ] 3.1 Create src/engines/article_normalizer.py with RawArticle, NormalizedArticle dataclasses
+- [x] 3. Implement data models
+  - [x] 3.1 Create src/engines/article_normalizer.py with RawArticle, NormalizedArticle dataclasses
     - Define all fields as specified in design
     - _Requirements: 2.1_
-  - [ ] 3.2 Add ScoredArticle dataclass to article_normalizer.py
+  - [x] 3.2 Add ScoredArticle dataclass to article_normalizer.py
     - Include all CSV output fields
     - _Requirements: 7.2_
-  - [ ] 3.3 Git commit
+  - [x] 3.3 Git commit
     - `feat: add article data models (RawArticle, NormalizedArticle, ScoredArticle)`
 
-- [ ] 4. Implement URL normalization and date parsing utilities
-  - [ ] 4.1 Implement normalize_url function in article_normalizer.py
+- [x] 4. Implement URL normalization and date parsing utilities
+  - [x] 4.1 Implement normalize_url function in article_normalizer.py
     - Strip tracking parameters (utm_*, fbclid, gclid, etc.)
     - Use tldextract for URL parsing
     - _Requirements: 2.2_
-  - [ ] 4.2 Write property test for URL canonicalization
+  - [x] 4.2 Write property test for URL canonicalization
     - **Property 4: URL Canonicalization**
     - **Validates: Requirements 2.2**
-  - [ ] 4.3 Implement parse_date function in article_normalizer.py
+  - [x] 4.3 Implement parse_date function in article_normalizer.py
     - Use python-dateutil for flexible parsing
     - Return None on parse failure
     - _Requirements: 2.3, 2.4_
-  - [ ] 4.4 Write property test for date parsing round-trip
+  - [x] 4.4 Write property test for date parsing round-trip
     - **Property 5: Date Parsing Round-Trip**
     - **Validates: Requirements 2.3**
-  - [ ] 4.5 Implement text normalization (trim whitespace, normalize unicode)
+  - [x] 4.5 Implement text normalization (trim whitespace, normalize unicode)
     - _Requirements: 2.5_
-  - [ ] 4.6 Write property test for text normalization
+  - [x] 4.6 Write property test for text normalization
     - **Property 6: Text Normalization**
     - **Validates: Requirements 2.5**
-  - [ ] 4.7 Git commit
+  - [x] 4.7 Git commit
     - `feat: add URL normalization and date parsing utilities`
 
-- [ ] 5. Checkpoint - Ensure all tests pass
+- [x] 5. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. Implement article normalization
-  - [ ] 6.1 Implement normalize_article and normalize_articles functions
+- [x] 6. Implement article normalization
+  - [x] 6.1 Implement normalize_article and normalize_articles functions
     - Convert RawArticle to NormalizedArticle
     - Apply URL canonicalization, date parsing, text normalization
     - _Requirements: 2.1, 2.2, 2.3, 2.5_
-  - [ ] 6.2 Write property test for normalization structure preservation
+  - [x] 6.2 Write property test for normalization structure preservation
     - **Property 3: Normalization Structure Preservation**
     - **Validates: Requirements 2.1**
-  - [ ] 6.3 Git commit
+  - [x] 6.3 Git commit
     - `feat: add article normalization functions`
 
-- [ ] 7. Implement deduplication
-  - [ ] 7.1 Create src/engines/deduplication.py with DeduplicationResult dataclass
+- [x] 7. Implement deduplication
+  - [x] 7.1 Create src/engines/deduplication.py with DeduplicationResult dataclass
     - _Requirements: 3.4_
-  - [ ] 7.2 Implement normalize_title function
+  - [x] 7.2 Implement normalize_title function
     - Lowercase, collapse whitespace
     - _Requirements: 3.2_
-  - [ ] 7.3 Implement deduplicate function
+  - [x] 7.3 Implement deduplicate function
     - First pass: remove duplicate URLs, keep earliest
     - Second pass: remove duplicate titles, keep earliest
     - Return DeduplicationResult with counts
     - _Requirements: 3.1, 3.2, 3.3, 3.4_
-  - [ ] 7.4 Write property test for URL uniqueness
+  - [x] 7.4 Write property test for URL uniqueness
     - **Property 7: Deduplication URL Uniqueness**
     - **Validates: Requirements 3.1**
-  - [ ] 7.5 Write property test for title uniqueness
+  - [x] 7.5 Write property test for title uniqueness
     - **Property 8: Deduplication Title Uniqueness**
     - **Validates: Requirements 3.2**
-  - [ ] 7.6 Write property test for keeping earliest
+  - [x] 7.6 Write property test for keeping earliest
     - **Property 9: Deduplication Keeps Earliest**
     - **Validates: Requirements 3.3**
-  - [ ] 7.7 Write property test for count invariant
+  - [x] 7.7 Write property test for count invariant
     - **Property 10: Deduplication Count Invariant**
     - **Validates: Requirements 3.4**
-  - [ ] 7.8 Git commit
+  - [x] 7.8 Git commit
     - `feat: add deduplication engine`
 
-- [ ] 8. Checkpoint - Ensure all tests pass
+- [x] 8. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 9. Implement relevance scoring
-  - [ ] 9.1 Create src/engines/relevance_scorer.py
+- [x] 9. Implement relevance scoring
+  - [x] 9.1 Create src/engines/relevance_scorer.py
     - _Requirements: 4.1, 4.4, 4.5, 4.6_
-  - [ ] 9.2 Implement calculate_recency_score function
+  - [x] 9.2 Implement calculate_recency_score function
     - 100 for today, linear decay to 0 at window edge
     - Return 0 for None dates or outside window
     - _Requirements: 4.1, 4.2, 4.3_
-  - [ ] 9.3 Implement calculate_relevance_score function
+  - [x] 9.3 Implement calculate_relevance_score function
     - Match keywords in title and summary
     - Score based on number of theme matches
     - _Requirements: 4.4, 4.5_
-  - [ ] 9.4 Implement calculate_overall_score function
+  - [x] 9.4 Implement calculate_overall_score function
     - Weighted combination of recency and relevance
     - _Requirements: 4.6_
-  - [ ] 9.5 Implement score_articles function
+  - [x] 9.5 Implement score_articles function
     - Score all articles, return tuples with scores
     - _Requirements: 4.1, 4.4, 4.6_
-  - [ ] 9.6 Write property test for score bounds
+  - [x] 9.6 Write property test for score bounds
     - **Property 11: Score Bounds**
     - **Validates: Requirements 4.1, 4.4**
-  - [ ] 9.7 Write property test for keyword matching contribution
+  - [x] 9.7 Write property test for keyword matching contribution
     - **Property 12: Keyword Matching Contribution**
     - **Validates: Requirements 4.5**
-  - [ ] 9.8 Write property test for overall score calculation
+  - [x] 9.8 Write property test for overall score calculation
     - **Property 13: Overall Score Calculation**
     - **Validates: Requirements 4.6**
-  - [ ] 9.9 Git commit
+  - [x] 9.9 Git commit
     - `feat: add relevance scoring engine`
 
-- [ ] 10. Implement summarizer
-  - [ ] 10.1 Create src/engines/summarizer.py
+- [x] 10. Implement summarizer
+  - [x] 10.1 Create src/engines/summarizer.py
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
-  - [ ] 10.2 Implement generate_summary function
+  - [x] 10.2 Implement generate_summary function
     - Extract 1-3 sentences from article content
     - _Requirements: 5.1_
-  - [ ] 10.3 Implement generate_why_it_matters function
+  - [x] 10.3 Implement generate_why_it_matters function
     - Security-first framing based on topics
     - _Requirements: 5.2_
-  - [ ] 10.4 Implement generate_linkedin_angle function
+  - [x] 10.4 Implement generate_linkedin_angle function
     - Single sentence suggestion
     - _Requirements: 5.3_
-  - [ ] 10.5 Implement generate_hashtags function
+  - [x] 10.5 Implement generate_hashtags function
     - Generate from matched topics
     - _Requirements: 5.4_
-  - [ ] 10.6 Implement extract_key_topics function
+  - [x] 10.6 Implement extract_key_topics function
     - Match against configured keyword themes
     - _Requirements: 5.5_
-  - [ ] 10.7 Write property test for summary sentence count
+  - [x] 10.7 Write property test for summary sentence count
     - **Property 14: Summary Sentence Count**
     - **Validates: Requirements 5.1**
-  - [ ] 10.8 Write property test for LinkedIn angle sentence count
+  - [x] 10.8 Write property test for LinkedIn angle sentence count
     - **Property 15: LinkedIn Angle Sentence Count**
     - **Validates: Requirements 5.3**
-  - [ ] 10.9 Write property test for hashtag generation
+  - [x] 10.9 Write property test for hashtag generation
     - **Property 16: Hashtag Generation**
     - **Validates: Requirements 5.4**
-  - [ ] 10.10 Write property test for topic extraction
+  - [x] 10.10 Write property test for topic extraction
     - **Property 17: Topic Extraction**
     - **Validates: Requirements 5.5**
-  - [ ] 10.11 Git commit
+  - [x] 10.11 Git commit
     - `feat: add summarizer engine`
 
-- [ ] 11. Checkpoint - Ensure all tests pass
+- [x] 11. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 12. Implement selector
-  - [ ] 12.1 Create src/engines/selector.py with select_top_articles function
+- [x] 12. Implement selector
+  - [x] 12.1 Create src/engines/selector.py with select_top_articles function
     - Sort by overall_score descending
     - Filter by minimum threshold
     - Select top N
     - _Requirements: 6.1, 6.2, 6.4_
-  - [ ] 12.2 Write property test for selection sorting
+  - [x] 12.2 Write property test for selection sorting
     - **Property 18: Selection Sorting**
     - **Validates: Requirements 6.1**
-  - [ ] 12.3 Write property test for selection count
+  - [x] 12.3 Write property test for selection count
     - **Property 19: Selection Count**
     - **Validates: Requirements 6.2**
-  - [ ] 12.4 Write property test for selection threshold
+  - [x] 12.4 Write property test for selection threshold
     - **Property 20: Selection Threshold**
     - **Validates: Requirements 6.4**
-  - [ ] 12.5 Git commit
+  - [x] 12.5 Git commit
     - `feat: add article selector engine`
 
-- [ ] 13. Implement CSV writer
-  - [ ] 13.1 Create src/engines/csv_writer.py
+- [x] 13. Implement CSV writer
+  - [x] 13.1 Create src/engines/csv_writer.py
     - _Requirements: 7.1, 7.2, 7.3, 7.4_
-  - [ ] 13.2 Implement format_scored_article_for_csv function
+  - [x] 13.2 Implement format_scored_article_for_csv function
     - Format all fields, use semicolon for multi-value
     - _Requirements: 7.2, 7.3_
-  - [ ] 13.3 Implement write_csv function
+  - [x] 13.3 Implement write_csv function
     - Write to src/output/ with timestamped filename
     - UTF-8 encoding
     - _Requirements: 7.1, 7.4_
-  - [ ] 13.4 Write property test for CSV output validation
+  - [x] 13.4 Write property test for CSV output validation
     - **Property 21: CSV Output Validation**
     - **Validates: Requirements 7.1, 7.2, 7.3, 7.4**
-  - [ ] 13.5 Git commit
+  - [x] 13.5 Git commit
     - `feat: add CSV writer engine`
 
-- [ ] 14. Implement source fetchers
-  - [ ] 14.1 Create src/engines/source_fetcher.py with SourceFetcher protocol
+- [x] 14. Implement source fetchers
+  - [x] 14.1 Create src/engines/source_fetcher.py with SourceFetcher protocol
     - Define fetch method and source_name property
     - _Requirements: 1.1_
-  - [ ] 14.2 Create src/engines/aws_news_blog_scraper.py
+  - [x] 14.2 Create src/engines/aws_news_blog_scraper.py
     - Implement RSS feed fetching (prefer) with HTML fallback
     - Use tenacity for retry with backoff
     - Respect request pacing
     - _Requirements: 1.3, 1.5, 1.6, 1.7, 1.8_
-  - [ ] 14.3 Create src/engines/purview_blog_scraper.py
+  - [x] 14.3 Create src/engines/purview_blog_scraper.py
     - Implement RSS feed fetching (prefer) with HTML fallback
     - Use tenacity for retry with backoff
     - Respect request pacing
     - _Requirements: 1.4, 1.5, 1.6, 1.7, 1.8_
-  - [ ] 14.4 Write property test for source fetch limit
+  - [x] 14.4 Write property test for source fetch limit
     - **Property 1: Source Fetch Limit**
     - **Validates: Requirements 1.8**
-  - [ ] 14.5 Write unit tests for AWS scraper parsing
+  - [x] 14.5 Write unit tests for AWS scraper parsing
     - Test with sample RSS/HTML fixtures
     - _Requirements: 1.3_
-  - [ ] 14.6 Write unit tests for Purview scraper parsing
+  - [x] 14.6 Write unit tests for Purview scraper parsing
     - Test with sample RSS/HTML fixtures
     - _Requirements: 1.4_
-  - [ ] 14.7 Git commit
+  - [x] 14.7 Git commit
     - `feat: add source fetchers (AWS News Blog, Purview Blog)`
 
-- [ ] 15. Checkpoint - Ensure all tests pass
+- [x] 15. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 16. Implement Google Drive connector
-  - [ ] 16.1 Create src/connectors/google_drive.py with UploadResult dataclass
+- [x] 16. Implement Google Drive connector
+  - [x] 16.1 Create src/connectors/google_drive.py with UploadResult dataclass
     - _Requirements: 8.1_
-  - [ ] 16.2 Implement upload_file function
+  - [x] 16.2 Implement upload_file function
     - Authenticate with service account
     - Upload to configured folder
     - Return UploadResult with success/failure info
     - _Requirements: 8.1, 8.2, 8.3, 8.4_
-  - [ ] 16.3 Write unit tests for upload success/failure handling
+  - [x] 16.3 Write unit tests for upload success/failure handling
     - Test logging of file ID on success
     - Test error handling on failure
     - _Requirements: 8.3, 8.4_
-  - [ ] 16.4 Git commit
+  - [x] 16.4 Git commit
     - `feat: add Google Drive connector`
 
-- [ ] 17. Implement observability
-  - [ ] 17.1 Create src/engines/observability.py with RunMetrics dataclass
+- [x] 17. Implement observability
+  - [x] 17.1 Create src/engines/observability.py with RunMetrics dataclass
     - _Requirements: 9.1, 9.2, 9.3, 9.4_
-  - [ ] 17.2 Implement create_run_metrics function
+  - [x] 17.2 Implement create_run_metrics function
     - Aggregate counts from pipeline stages
     - _Requirements: 9.1, 9.2, 9.3, 9.4_
-  - [ ] 17.3 Implement write_run_log function
+  - [x] 17.3 Implement write_run_log function
     - Write JSON to src/output/
     - _Requirements: 9.5_
-  - [ ] 17.4 Implement log_stage_counts helper
+  - [x] 17.4 Implement log_stage_counts helper
     - _Requirements: 9.1_
-  - [ ] 17.5 Write property test for metrics completeness
+  - [x] 17.5 Write property test for metrics completeness
     - **Property 22: Metrics Completeness**
     - **Validates: Requirements 9.1, 9.2, 9.3, 9.4, 9.5**
-  - [ ] 17.6 Git commit
+  - [x] 17.6 Git commit
     - `feat: add observability and run metrics`
 
-- [ ] 18. Implement workflow orchestrator
-  - [ ] 18.1 Create src/agent/workflow.py with WorkflowResult dataclass
+- [x] 18. Implement workflow orchestrator
+  - [x] 18.1 Create src/agent/workflow.py with WorkflowResult dataclass
     - _Requirements: 1.1_
-  - [ ] 18.2 Implement run_pipeline function
+  - [x] 18.2 Implement run_pipeline function
     - Orchestrate all pipeline stages
     - Handle errors gracefully, continue on partial failures
     - _Requirements: 1.1, 1.2, 9.6_
-  - [ ] 18.3 Write property test for source fetch isolation
+  - [x] 18.3 Write property test for source fetch isolation
     - **Property 2: Source Fetch Isolation**
     - **Validates: Requirements 1.1, 1.2**
-  - [ ] 18.4 Git commit
+  - [x] 18.4 Git commit
     - `feat: add workflow orchestrator`
 
-- [ ] 19. Implement main entry point
-  - [ ] 19.1 Create src/main.py with CLI argument parsing
+- [x] 19. Implement main entry point
+  - [x] 19.1 Create src/main.py with CLI argument parsing
     - Support --mock and -v flags
     - _Requirements: 10.1_
-  - [ ] 19.2 Create src/agent/runner.py to wire components
+  - [x] 19.2 Create src/agent/runner.py to wire components
     - Initialize settings, run workflow, handle exit codes
     - _Requirements: 10.1_
-  - [ ] 19.3 Git commit
+  - [x] 19.3 Git commit
     - `feat: add main entry point and runner`
 
-- [ ] 20. Final checkpoint - Ensure all tests pass
+- [x] 20. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
   - Run full test suite with coverage
   - Verify all 24 properties are tested

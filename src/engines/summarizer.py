@@ -208,6 +208,10 @@ def generate_linkedin_angle(article: NormalizedArticle) -> str:
     title = article.title or "This article"
     source = article.source or "the cloud provider"
     
+    # Strip trailing punctuation from title to avoid creating multiple sentences
+    # when the title is embedded in the angle sentence
+    title = title.rstrip('.!?')
+    
     # Generate a professional LinkedIn-style angle
     angles = [
         f"Share how {title} from {source} can benefit your organization's security strategy.",
