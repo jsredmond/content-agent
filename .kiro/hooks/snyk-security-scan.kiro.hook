@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "Snyk Security Scan",
+  "description": "Runs the Snyk MCP tool to scan the codebase for security vulnerabilities",
+  "version": "1",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Use the Snyk MCP tool to scan this repository for security issues. Analyze the codebase including Python files, dependencies in requirements.txt and pyproject.toml, and report any vulnerabilities found along with recommended fixes."
+  }
+}

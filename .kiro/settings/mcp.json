@@ -1,0 +1,40 @@
+{
+  "mcpServers": {
+    "aws-docs": {
+      "command": "uvx",
+      "args": [
+        "awslabs.aws-documentation-mcp-server@latest"
+      ],
+      "env": {
+        "FASTMCP_LOG_LEVEL": "ERROR"
+      },
+      "disabled": false,
+      "autoApprove": [
+        "search_documentation",
+        "read_documentation"
+      ]
+    },
+    "terraform": {
+      "command": "/Users/jeremyredmond/go/bin/terraform-mcp-server",
+      "args": [],
+      "disabled": false,
+      "autoApprove": [
+        "search_providers",
+        "get_provider_details"
+      ]
+    },
+    "Snyk": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "snyk@1.1300.0",
+        "mcp",
+        "-t",
+        "stdio"
+      ],
+      "env": {},
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}
