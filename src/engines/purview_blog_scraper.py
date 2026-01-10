@@ -22,10 +22,10 @@ logger = logging.getLogger(__name__)
 
 
 # Microsoft Purview Blog RSS feed URL
-PURVIEW_RSS_URL = "https://techcommunity.microsoft.com/plugins/custom/microsoft/o365/custom-blog-rss?tid=-1817042702966616498&board=MicrosoftPurviewBlog&size=50"
+PURVIEW_RSS_URL = "https://techcommunity.microsoft.com/t5/s/gxcuf89792/rss/board?board.id=AzurePurviewBlog"
 
 # Microsoft Purview Blog HTML fallback URL
-PURVIEW_BLOG_URL = "https://techcommunity.microsoft.com/category/microsoftpurview/blog/microsoftpurviewblog"
+PURVIEW_BLOG_URL = "https://techcommunity.microsoft.com/t5/azure-purview-blog/bg-p/AzurePurviewBlog"
 
 
 class PurviewBlogScraper:
