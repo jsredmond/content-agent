@@ -237,3 +237,65 @@ def normalize_text(text: str | None) -> str | None:
     normalized = re.sub(r'\s+', ' ', normalized)
     
     return normalized
+
+
+def normalize_article(raw: RawArticle) -> NormalizedArticle:
+    """Convert a RawArticle to a NormalizedArticle.
+    
+    Applies URL canonicalization, date parsing, and text normalization
+    to produce a standardized article record.
+    
+    Args:
+        raw: The raw article fetched from a source
+        
+    Returns:
+        NormalizedArticle with standardized fields
+        
+    Example:
+        >>> raw = RawArticle(
+        ...     source="AWS News Blog",
+        ...     title="  New Feature  ",
+        ...     url="https://aws.amazon.com/blog?utm_source=twitter",
+        ...     published_date="2024-01-15",
+        ...     author="Jane Doe",
+        ...     teaser="  Check out this feature  "
+        ... )
+        >>> normalized = normalize_article(raw)
+        >>> normalized.title
+        'New Feature'
+        >>> normalized.canonical_url
+        'https://aws.amazon.com/blog'
+    """
+    return NormalizedArticle(
+        source=raw.source,
+        title=normalize_text(raw.title) or raw.title,
+        canonical_url=normalize_url(raw.url),
+        published_date=parse_date(raw.published_date),
+        author=normalize_text(raw.author),
+        summary_text=normalize_text(raw.teaser),
+    )
+
+
+def normalize_articles(articles: list[RawArticle]) -> list[NormalizedArticle]:
+    """Normalize a batch of articles.
+    
+    Converts a list of RawArticle objects to NormalizedArticle objects,
+    applying URL canonicalization, date parsing, and text normalization
+    to each article.
+    
+    Args:
+        articles: List of raw articles to normalize
+        
+    Returns:
+        List of normalized articles
+        
+    Example:
+        >>> raw_articles = [
+        ...     RawArticle(source="AWS", title="Article 1", url="https://aws.com/1"),
+        ...     RawArticle(source="AWS", title="Article 2", url="https://aws.com/2"),
+        ... ]
+        >>> normalized = normalize_articles(raw_articles)
+        >>> len(normalized)
+        2
+    """
+    return [normalize_article(raw) for raw in articles]

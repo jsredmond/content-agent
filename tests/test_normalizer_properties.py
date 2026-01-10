@@ -12,7 +12,11 @@ from hypothesis import given, settings, strategies as st, assume
 
 from src.engines.article_normalizer import (
     TRACKING_PARAMS,
+    RawArticle,
+    NormalizedArticle,
     normalize_url,
+    normalize_article,
+    normalize_articles,
 )
 
 
@@ -386,3 +390,191 @@ class TestTextNormalization:
         assert result is not None
         # Result should be in NFC form
         assert unicodedata.is_normalized('NFC', result)
+
+
+
+# Feature: content-agent, Property 3: Normalization Structure Preservation
+# Validates: Requirements 2.1
+class TestNormalizationStructurePreservation:
+    """Property tests for normalization structure preservation.
+    
+    For any valid RawArticle, normalizing it SHALL produce a NormalizedArticle
+    with all required fields (source, title, canonical_url, published_date,
+    author, summary_text) present.
+    """
+
+    @given(
+        source=st.text(min_size=1, max_size=50),
+        title=st.text(min_size=1, max_size=200),
+        url=st.sampled_from([
+            "https://example.com/article",
+            "https://aws.amazon.com/blogs/news/post",
+            "https://techcommunity.microsoft.com/blog/post",
+            "https://example.org/path?id=123&utm_source=test",
+        ]),
+        published_date=st.one_of(
+            st.none(),
+            st.sampled_from([
+                "2024-01-15",
+                "January 15, 2024",
+                "2024-01-15T10:30:00Z",
+                "Mon, 15 Jan 2024 10:30:00 GMT",
+                "invalid date",
+            ]),
+        ),
+        author=st.one_of(st.none(), st.text(min_size=0, max_size=100)),
+        teaser=st.one_of(st.none(), st.text(min_size=0, max_size=500)),
+    )
+    @settings(max_examples=100)
+    def test_normalized_article_has_all_required_fields(
+        self,
+        source: str,
+        title: str,
+        url: str,
+        published_date: str | None,
+        author: str | None,
+        teaser: str | None,
+    ):
+        """For any valid RawArticle, normalizing it SHALL produce a NormalizedArticle with all required fields present."""
+        raw = RawArticle(
+            source=source,
+            title=title,
+            url=url,
+            published_date=published_date,
+            author=author,
+            teaser=teaser,
+        )
+        
+        normalized = normalize_article(raw)
+        
+        # Verify it's a NormalizedArticle instance
+        assert isinstance(normalized, NormalizedArticle)
+        
+        # Verify all required fields are present (not missing from the dataclass)
+        assert hasattr(normalized, 'source')
+        assert hasattr(normalized, 'title')
+        assert hasattr(normalized, 'canonical_url')
+        assert hasattr(normalized, 'published_date')
+        assert hasattr(normalized, 'author')
+        assert hasattr(normalized, 'summary_text')
+        
+        # Verify source and title are non-None (required fields)
+        assert normalized.source is not None
+        assert normalized.title is not None
+        assert normalized.canonical_url is not None
+
+    @given(
+        articles=st.lists(
+            st.fixed_dictionaries({
+                'source': st.text(min_size=1, max_size=30),
+                'title': st.text(min_size=1, max_size=100),
+                'url': st.sampled_from([
+                    "https://example.com/1",
+                    "https://example.com/2",
+                    "https://aws.amazon.com/blog",
+                ]),
+                'published_date': st.one_of(st.none(), st.just("2024-01-15")),
+                'author': st.one_of(st.none(), st.text(min_size=1, max_size=50)),
+                'teaser': st.one_of(st.none(), st.text(min_size=0, max_size=200)),
+            }),
+            min_size=0,
+            max_size=10,
+        )
+    )
+    @settings(max_examples=100)
+    def test_normalize_articles_preserves_count(self, articles: list[dict]):
+        """For any list of RawArticles, normalize_articles SHALL return the same number of NormalizedArticles."""
+        raw_articles = [
+            RawArticle(
+                source=a['source'],
+                title=a['title'],
+                url=a['url'],
+                published_date=a['published_date'],
+                author=a['author'],
+                teaser=a['teaser'],
+            )
+            for a in articles
+        ]
+        
+        normalized = normalize_articles(raw_articles)
+        
+        assert len(normalized) == len(raw_articles)
+
+    @given(
+        source=st.text(min_size=1, max_size=30),
+        title=st.text(min_size=1, max_size=100),
+    )
+    @settings(max_examples=100)
+    def test_source_preserved_after_normalization(self, source: str, title: str):
+        """For any RawArticle, the source field SHALL be preserved in the NormalizedArticle."""
+        raw = RawArticle(
+            source=source,
+            title=title,
+            url="https://example.com/article",
+        )
+        
+        normalized = normalize_article(raw)
+        
+        assert normalized.source == source
+
+    def test_normalize_article_applies_url_canonicalization(self):
+        """normalize_article SHALL apply URL canonicalization."""
+        raw = RawArticle(
+            source="Test",
+            title="Test Article",
+            url="https://example.com/article?utm_source=twitter&id=123",
+        )
+        
+        normalized = normalize_article(raw)
+        
+        assert "utm_source" not in normalized.canonical_url
+        assert "id=123" in normalized.canonical_url
+
+    def test_normalize_article_applies_text_normalization(self):
+        """normalize_article SHALL apply text normalization to title and teaser."""
+        raw = RawArticle(
+            source="Test",
+            title="  Test   Article  ",
+            url="https://example.com/article",
+            teaser="  Some   teaser   text  ",
+        )
+        
+        normalized = normalize_article(raw)
+        
+        assert normalized.title == "Test Article"
+        assert normalized.summary_text == "Some teaser text"
+
+    def test_normalize_article_parses_date(self):
+        """normalize_article SHALL parse date strings to datetime."""
+        raw = RawArticle(
+            source="Test",
+            title="Test Article",
+            url="https://example.com/article",
+            published_date="2024-01-15",
+        )
+        
+        normalized = normalize_article(raw)
+        
+        assert normalized.published_date is not None
+        assert normalized.published_date.year == 2024
+        assert normalized.published_date.month == 1
+        assert normalized.published_date.day == 15
+
+    def test_normalize_article_handles_invalid_date(self):
+        """normalize_article SHALL set published_date to None for invalid dates."""
+        raw = RawArticle(
+            source="Test",
+            title="Test Article",
+            url="https://example.com/article",
+            published_date="not a valid date",
+        )
+        
+        normalized = normalize_article(raw)
+        
+        assert normalized.published_date is None
+
+    def test_normalize_articles_empty_list(self):
+        """normalize_articles SHALL handle empty list."""
+        normalized = normalize_articles([])
+        
+        assert normalized == []
