@@ -7,6 +7,75 @@ import os
 from dotenv import load_dotenv
 
 
+# Keywords that indicate technical article types (announcements, releases, tutorials, etc.)
+TECHNICAL_ARTICLE_KEYWORDS: list[str] = [
+    # Announcements and releases
+    "announcing",
+    "announced",
+    "announcement",
+    "introducing",
+    "now available",
+    "generally available",
+    "public preview",
+    "private preview",
+    "new feature",
+    "new release",
+    "release notes",
+    "launched",
+    "launches",
+    "rolling out",
+    "ga release",
+    "preview release",
+    # Walkthroughs and tutorials
+    "walkthrough",
+    "walk-through",
+    "tutorial",
+    "how to",
+    "how-to",
+    "step by step",
+    "step-by-step",
+    "getting started",
+    "guide",
+    "hands-on",
+    "deep dive",
+    "best practices",
+    # Technical content indicators
+    "architecture",
+    "implementation",
+    "configure",
+    "configuring",
+    "configuration",
+    "deploy",
+    "deploying",
+    "deployment",
+    "integrate",
+    "integrating",
+    "integration",
+    "api",
+    "sdk",
+    "cli",
+    "terraform",
+    "cloudformation",
+    "arm template",
+    "bicep",
+    "powershell",
+    "automation",
+    "script",
+    "code sample",
+    "sample code",
+    "example",
+    # Updates and changes
+    "update",
+    "updates",
+    "what's new",
+    "whats new",
+    "changelog",
+    "change log",
+    "improvements",
+    "enhanced",
+    "enhancement",
+]
+
 # Default keyword sets for relevance scoring themes
 DEFAULT_KEYWORDS: dict[str, list[str]] = {
     "cloud_security": [
@@ -104,6 +173,8 @@ class Settings:
         request_delay_seconds: Delay between HTTP requests
         max_retries: Maximum retry attempts for failed requests
         keywords: Dictionary mapping themes to keyword lists
+        filter_technical_only: If True, only include technical articles (announcements, releases, tutorials)
+        technical_keywords: Keywords that indicate technical article content
     """
 
     google_drive_folder_id: str = ""
@@ -116,6 +187,8 @@ class Settings:
     request_delay_seconds: float = 1.0
     max_retries: int = 3
     keywords: dict[str, list[str]] = field(default_factory=lambda: DEFAULT_KEYWORDS.copy())
+    filter_technical_only: bool = True
+    technical_keywords: list[str] = field(default_factory=lambda: TECHNICAL_ARTICLE_KEYWORDS.copy())
 
     def validate(self) -> None:
         """Validate configuration values.
@@ -200,6 +273,10 @@ def load_settings(env_path: str | Path | None = None, validate: bool = True) -> 
     else:
         load_dotenv()
 
+    # Parse filter_technical_only from env (default True)
+    filter_technical_env = os.getenv("FILTER_TECHNICAL_ONLY", "true").lower()
+    filter_technical_only = filter_technical_env in ("true", "1", "yes")
+
     settings = Settings(
         google_drive_folder_id=os.getenv("GOOGLE_DRIVE_FOLDER_ID") or os.getenv("GOOGLE_DRIVE_OUTPUT_FOLDER_ID", ""),
         max_articles_per_source=_parse_int(
@@ -227,6 +304,8 @@ def load_settings(env_path: str | Path | None = None, validate: bool = True) -> 
             os.getenv("MAX_RETRIES"), 3
         ),
         keywords=DEFAULT_KEYWORDS.copy(),
+        filter_technical_only=filter_technical_only,
+        technical_keywords=TECHNICAL_ARTICLE_KEYWORDS.copy(),
     )
 
     if validate:
