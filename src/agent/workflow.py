@@ -21,6 +21,7 @@ from src.engines.article_normalizer import (
     normalize_articles,
 )
 from src.engines.aws_news_blog_scraper import AWSNewsBlogScraper
+from src.engines.content_type_filter import filter_technical_articles
 from src.engines.csv_writer import write_csv
 from src.engines.deduplication import deduplicate
 from src.engines.observability import (
@@ -193,17 +194,18 @@ def _calculate_average_score(scored_articles: list[ScoredArticle]) -> float:
 
 def run_pipeline(settings: Settings) -> WorkflowResult:
     """Execute the full content curation pipeline.
-    
+
     Orchestrates all pipeline stages:
     1. Fetch articles from configured sources
     2. Normalize articles to common schema
     3. Deduplicate by URL and title
-    4. Score for recency and relevance
-    5. Generate summaries and LinkedIn metadata
+    4. Filter for technical articles (announcements, releases, tutorials)
+    5. Score for recency and relevance
     6. Select top N articles
-    7. Write CSV output
-    8. Upload to Google Drive
-    9. Write run log
+    7. Generate summaries and LinkedIn metadata
+    8. Write CSV output
+    9. Upload to Google Drive
+    10. Write run log
     
     Handles errors gracefully, continuing on partial failures where possible.
     
@@ -244,9 +246,17 @@ def run_pipeline(settings: Settings) -> WorkflowResult:
     dedup_result = deduplicate(normalized)
     deduped = dedup_result.articles
     log_stage_counts("deduped", len(deduped))
-    
-    # Stage 4: Score articles
-    scored = score_articles(deduped, settings)
+
+    # Stage 4: Filter for technical articles (if enabled)
+    if settings.filter_technical_only:
+        technical = filter_technical_articles(deduped, settings.technical_keywords)
+        log_stage_counts("technical_filtered", len(technical))
+    else:
+        technical = deduped
+        logger.info("Technical filter disabled, keeping all articles")
+
+    # Stage 5: Score articles
+    scored = score_articles(technical, settings)
     
     # Stage 5: Select top articles
     selected = select_top_articles(
