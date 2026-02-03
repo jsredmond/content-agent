@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.contentfactory.daily</string>
+    
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/jeremy/code/content-agent/.venv/bin/python3</string>
+        <string>-m</string>
+        <string>src.main</string>
+    </array>
+    
+    <key>WorkingDirectory</key>
+    <string>/Users/jeremy/code/content-agent</string>
+    
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>8</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    
+    <key>StandardOutPath</key>
+    <string>/Users/jeremy/Library/Logs/content_factory_out.log</string>
+    
+    <key>StandardErrorPath</key>
+    <string>/Users/jeremy/Library/Logs/content_factory_err.log</string>
+    
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>LAUNCHED_BY_LAUNCHD</key>
+        <string>1</string>
+    </dict>
+    
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

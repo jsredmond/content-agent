@@ -17,6 +17,7 @@ Data Models:
 from dataclasses import dataclass
 from datetime import datetime
 import logging
+import random
 import re
 
 
@@ -519,6 +520,13 @@ CRITICAL OUTPUT RULES:
 - Begin your output IMMEDIATELY with the [HOOK] tag
 - Use the exact tag format specified in the prompt"""
     
+    # Hook styles for randomization
+    HOOK_STYLES: list[str] = [
+        "Statistic-heavy",
+        "Contrarian",
+        "Bold Prediction",
+    ]
+    
     # Hook-Value-CTA template for user prompts (Requirement 5.2)
     HOOK_VALUE_CTA_TEMPLATE: str = """Create a LinkedIn post about the following article using the Hook-Value-CTA framework:
 
@@ -531,12 +539,9 @@ ARTICLE INFORMATION:
 
 FRAMEWORK REQUIREMENTS:
 
-1. HOOK (1-2 sentences): Start with ONE of these attention-grabbing techniques:
-   - Statistic-heavy: Lead with a compelling number or data point
-   - Contrarian: Challenge conventional wisdom or common assumptions
-   - Bold Prediction: Make a confident forecast about the future
+1. HOOK (1-2 sentences): {hook_style_instruction}
    
-   IMPORTANT: Avoid starting with a question. Cycle through these hook styles to keep your feed fresh.
+   CRITICAL VARIETY RULE: DO NOT use a statistic for more than one out of every four posts. Use a Bold Prediction or a Contrarian opening for the others. Avoid starting with a question.
 
 2. VALUE (3-5 sentences): Provide the core insight:
    - What's the key announcement or update?
@@ -595,6 +600,7 @@ Include exactly 3 hashtags from: {hashtags}"""
         key_topics: list[str],
         why_it_matters: str,
         hashtags: list[str],
+        hook_style: str | None = None,
     ) -> str:
         """Build a complete prompt for post generation.
         
@@ -609,29 +615,11 @@ Include exactly 3 hashtags from: {hashtags}"""
             key_topics: List of topic keywords associated with the article.
             why_it_matters: Statement explaining the article's significance.
             hashtags: List of hashtags to include in the post.
+            hook_style: Optional specific hook style to use (e.g., "Contrarian", "Bold Prediction").
+                       If None, all styles are presented as options.
             
         Returns:
             A formatted prompt string ready to send to the LLM.
-            
-        Example:
-            >>> builder = PromptBuilder()
-            >>> prompt = builder.build(
-            ...     title="New IAM Feature Released",
-            ...     source="AWS News Blog",
-            ...     summary="AWS releases new IAM capabilities...",
-            ...     key_topics=["identity_and_access", "cloud_security"],
-            ...     why_it_matters="Improves access control for enterprises",
-            ...     hashtags=["#AWS", "#IAM", "#Security"]
-            ... )
-            >>> "New IAM Feature Released" in prompt
-            True
-            >>> "CIO" in prompt or "CISO" in prompt  # Audience context
-            True
-            
-        Requirements:
-            - 5.1: Include article title, source, summary, and key topics
-            - 5.2: Include Hook-Value-CTA framework instructions
-            - 5.5: Add security framing for security-related topics
         """
         # Format key topics as comma-separated string
         key_topics_str = ", ".join(key_topics) if key_topics else "General"
@@ -642,6 +630,9 @@ Include exactly 3 hashtags from: {hashtags}"""
         # Add security framing if applicable
         security_framing = self._add_security_framing(key_topics)
         
+        # Build hook style instruction based on whether a specific style is requested
+        hook_style_instruction = self._build_hook_style_instruction(hook_style)
+        
         # Build the prompt using the template
         prompt = self.HOOK_VALUE_CTA_TEMPLATE.format(
             title=title,
@@ -651,9 +642,33 @@ Include exactly 3 hashtags from: {hashtags}"""
             why_it_matters=why_it_matters,
             hashtags=hashtags_str,
             security_framing=security_framing,
+            hook_style_instruction=hook_style_instruction,
         )
         
         return prompt
+    
+    def _build_hook_style_instruction(self, hook_style: str | None) -> str:
+        """Build the hook style instruction for the prompt.
+        
+        Args:
+            hook_style: Specific hook style to use, or None for all options.
+            
+        Returns:
+            Instruction text for the hook style section.
+        """
+        if hook_style:
+            style_descriptions = {
+                "Statistic-heavy": "Lead with a compelling number or data point",
+                "Contrarian": "Challenge conventional wisdom or common assumptions",
+                "Bold Prediction": "Make a confident forecast about the future",
+            }
+            description = style_descriptions.get(hook_style, "")
+            return f"USE THIS HOOK STYLE: {hook_style} - {description}"
+        else:
+            return """Start with ONE of these attention-grabbing techniques:
+   - Statistic-heavy: Lead with a compelling number or data point
+   - Contrarian: Challenge conventional wisdom or common assumptions
+   - Bold Prediction: Make a confident forecast about the future"""
     
     def _add_security_framing(self, topics: list[str]) -> str:
         """Add security-first messaging for relevant topics.
@@ -1301,7 +1316,16 @@ class ContentGenerator:
             if was_truncated:
                 logger.debug(f"Content was truncated for article: '{article.title}'")
             
-            # Step 2: Build prompt using PromptBuilder
+            # Step 2: Randomly select a hook style for variety
+            # Weight non-statistic styles higher (75% non-statistic, 25% statistic)
+            hook_style = random.choices(
+                PromptBuilder.HOOK_STYLES,
+                weights=[1, 3, 3],  # Statistic-heavy=1, Contrarian=3, Bold Prediction=3
+                k=1
+            )[0]
+            logger.debug(f"Selected hook style: {hook_style}")
+            
+            # Step 3: Build prompt using PromptBuilder with selected hook style
             prompt = self._prompt_builder.build(
                 title=article.title,
                 source=article.source,
@@ -1309,12 +1333,13 @@ class ContentGenerator:
                 key_topics=article.key_topics,
                 why_it_matters=article.why_it_matters,
                 hashtags=article.suggested_hashtags,
+                hook_style=hook_style,
             )
             
-            # Step 3: Get system prompt
+            # Step 4: Get system prompt
             system_prompt = self._prompt_builder.get_system_prompt()
             
-            # Step 4: Call OllamaClient.chat with configured model
+            # Step 5: Call OllamaClient.chat with configured model
             logger.debug(f"Sending generation request to model '{self.model}'")
             response = self._client.chat(
                 model=self.model,
@@ -1325,10 +1350,13 @@ class ContentGenerator:
             if not response or not response.strip():
                 raise GenerationError(article.title, "Model returned empty response")
             
-            # Step 5: Parse response into hook, value, cta sections
+            # Step 6: Parse response into hook, value, cta sections
             hook, value, cta = self._parse_response(response)
             
-            # Step 6: Ensure character count is under 3000
+            # Step 7: Extract hashtags from the LLM response (not from article)
+            extracted_hashtags = self._extract_hashtags_from_response(response)
+            
+            # Step 8: Ensure character count is under 3000
             full_text = response.strip()
             character_count = len(full_text)
             
@@ -1342,14 +1370,16 @@ class ContentGenerator:
                 character_count = len(full_text)
                 # Re-parse the truncated response
                 hook, value, cta = self._parse_response(full_text)
+                # Re-extract hashtags from truncated response
+                extracted_hashtags = self._extract_hashtags_from_response(full_text)
             
-            # Step 7: Create and return GeneratedPost
+            # Step 9: Create and return GeneratedPost
             generated_post = GeneratedPost(
                 full_text=full_text,
                 hook=hook,
                 value=value,
                 cta=cta,
-                hashtags=article.suggested_hashtags,
+                hashtags=extracted_hashtags,  # Use extracted hashtags from LLM response
                 model_used=self.model,
                 generated_at=datetime.now(),
                 source_url=article.url,
@@ -1372,6 +1402,39 @@ class ContentGenerator:
         except Exception as e:
             # Wrap any other exceptions in GenerationError
             raise GenerationError(article.title, str(e))
+    
+    def _extract_hashtags_from_response(self, response: str) -> list[str]:
+        """Extract hashtags from the [HASHTAGS] tag in the LLM response.
+        
+        Parses the hashtags section from the LLM response and returns them
+        as a list. Falls back to extracting any hashtags found in the response
+        if the [HASHTAGS] tag is not present.
+        
+        Args:
+            response: The full response text from the LLM.
+            
+        Returns:
+            A list of hashtag strings (e.g., ["#CloudSecurity", "#AWS", "#AI"]).
+            Returns empty list if no hashtags found.
+        """
+        # Try to extract from [HASHTAGS] tag first
+        hashtags_content = self._extract_tagged_section(response, "HASHTAGS")
+        
+        if hashtags_content:
+            # Parse hashtags from the tagged content
+            hashtags = re.findall(r'#\w+', hashtags_content)
+            return hashtags[:3]  # Return at most 3 hashtags
+        
+        # Fallback: extract any hashtags from the response
+        all_hashtags = re.findall(r'#\w+', response)
+        # Return unique hashtags, preserving order
+        seen = set()
+        unique_hashtags = []
+        for tag in all_hashtags:
+            if tag not in seen:
+                seen.add(tag)
+                unique_hashtags.append(tag)
+        return unique_hashtags[:3]
     
     def _extract_tagged_section(self, response: str, tag: str) -> str | None:
         """Extract content between [TAG] and [/TAG] markers.

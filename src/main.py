@@ -12,9 +12,35 @@ Requirements: 10.1
 """
 
 import argparse
+import logging
+import os
 import sys
+from datetime import datetime
 
 from src.agent.runner import run
+
+# Configure logging for launchd detection
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+
+def is_launched_by_launchd() -> bool:
+    """Check if the script was launched by launchd.
+    
+    Returns:
+        True if launched by launchd, False otherwise.
+    """
+    return os.environ.get("LAUNCHED_BY_LAUNCHD") == "1"
+
+
+def log_automation_trigger() -> None:
+    """Log that the daily automation was triggered by launchd."""
+    timestamp = datetime.now().isoformat()
+    logger.info(f"Daily Automation Triggered at {timestamp}")
+    print(f"[{timestamp}] Daily Automation Triggered")
 
 
 def parse_args(args: list[str] | None = None) -> argparse.Namespace:
@@ -55,6 +81,10 @@ def main(args: list[str] | None = None) -> int:
     Returns:
         Exit code (0 for success, non-zero for failure).
     """
+    # Check if launched by launchd and log accordingly
+    if is_launched_by_launchd():
+        log_automation_trigger()
+    
     parsed = parse_args(args)
     return run(mock=parsed.mock, verbose=parsed.verbose)
 
