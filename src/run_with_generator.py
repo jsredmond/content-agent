@@ -108,8 +108,8 @@ def main() -> int:
     )
     parser.add_argument(
         "--model",
-        default="qwen3-coder:30b",
-        help="Ollama model to use (default: qwen3-coder:30b)"
+        default="llama4:scout",
+        help="Ollama model to use (default: llama4:scout)"
     )
     parser.add_argument(
         "--timeout",

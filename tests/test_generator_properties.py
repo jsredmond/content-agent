@@ -1937,15 +1937,27 @@ class TestModelConfigurationAcceptance:
             f"Generator should accept common model name '{model_name}'"
         )
 
-    def test_default_model_is_qwen3_coder(self):
-        """When no model is specified, generator SHALL default to qwen3-coder:30b.
+    def test_default_model_is_llama4_scout(self):
+        """When no model is specified, generator SHALL default to llama4:scout.
         
-        **Validates: Requirements 2.2**
+        **Validates: Requirements 4.1, 4.2**
         """
         generator = ContentGenerator()
         
-        assert generator.model == "qwen3-coder:30b", (
-            f"Default model should be 'qwen3-coder:30b', got '{generator.model}'"
+        assert generator.model == "llama4:scout", (
+            f"Default model should be 'llama4:scout', got '{generator.model}'"
+        )
+
+    def test_custom_model_configuration_still_works(self):
+        """Custom model configuration SHALL still be supported.
+        
+        **Validates: Requirements 4.3**
+        """
+        custom_model = "qwen3-coder:30b"
+        generator = ContentGenerator(model=custom_model)
+        
+        assert generator.model == custom_model, (
+            f"Custom model should be '{custom_model}', got '{generator.model}'"
         )
 
     @given(
@@ -3075,9 +3087,17 @@ Test CTA?
         """For any failed article, the failure record SHALL contain title and error message.
         
         **Validates: Requirements 8.3**
+        
+        Note: Articles must have score_overall >= 50 to pass the validation gate
+        and be processed (where they can then fail due to empty response).
         """
         model_name = "qwen3-coder:30b"
         generator = ContentGenerator(model=model_name)
+        
+        # Ensure all articles have score_overall >= MIN_SCORE_THRESHOLD (50)
+        # so they pass the validation gate and can be processed
+        for article in articles:
+            article.score_overall = max(article.score_overall, 50.0)
         
         # Make all articles fail
         mock_ollama = MagicMock()
@@ -3573,9 +3593,17 @@ CTA?
         """Progress logs SHALL contain article titles for context.
         
         **Validates: Requirements 8.4**
+        
+        Note: Articles must have score_overall >= 50 to pass the validation gate
+        and be processed (where their titles appear in logs).
         """
         model_name = "qwen3-coder:30b"
         generator = ContentGenerator(model=model_name)
+        
+        # Ensure all articles have score_overall >= MIN_SCORE_THRESHOLD (50)
+        # so they pass the validation gate and can be processed
+        for article in articles:
+            article.score_overall = max(article.score_overall, 50.0)
         
         mock_response = """Hook
 
@@ -3804,7 +3832,7 @@ class TestStandaloneUsage:
         generator = ContentGenerator()
         
         assert generator is not None
-        assert generator.model == "qwen3-coder:30b"
+        assert generator.model == "llama4:scout"
         assert generator.timeout == 120
         assert generator.max_tokens == 10000
         assert generator.num_ctx == 16384
@@ -4023,7 +4051,7 @@ What's your biggest cloud security challenge right now? Share below!
         
         mock_ollama = MagicMock()
         mock_list_response = MagicMock()
-        mock_list_response.models = [MagicMock(model="qwen3-coder:30b")]
+        mock_list_response.models = [MagicMock(model="llama4:scout")]
         mock_ollama.list.return_value = mock_list_response
         mock_ollama.chat.return_value = {'message': {'content': mock_response}}
         
@@ -4033,7 +4061,7 @@ What's your biggest cloud security challenge right now? Share below!
         # Verify the post was generated correctly
         assert post is not None
         assert post.source_url == article.url
-        assert post.model_used == "qwen3-coder:30b"
+        assert post.model_used == "llama4:scout"
         assert post.character_count < 3000
 
     def test_content_generator_batch_accepts_scored_articles(self):
@@ -4092,7 +4120,7 @@ CTA question?
         
         mock_ollama = MagicMock()
         mock_list_response = MagicMock()
-        mock_list_response.models = [MagicMock(model="qwen3-coder:30b")]
+        mock_list_response.models = [MagicMock(model="llama4:scout")]
         mock_ollama.list.return_value = mock_list_response
         mock_ollama.chat.return_value = {'message': {'content': mock_response}}
         
@@ -4238,7 +4266,7 @@ CTA?
         
         mock_ollama = MagicMock()
         mock_list_response = MagicMock()
-        mock_list_response.models = [MagicMock(model="qwen3-coder:30b")]
+        mock_list_response.models = [MagicMock(model="llama4:scout")]
         mock_ollama.list.return_value = mock_list_response
         mock_ollama.chat.return_value = {'message': {'content': mock_response}}
         
@@ -4300,7 +4328,7 @@ CTA?"""
         
         mock_ollama = MagicMock()
         mock_list_response = MagicMock()
-        mock_list_response.models = [MagicMock(model="qwen3-coder:30b")]
+        mock_list_response.models = [MagicMock(model="llama4:scout")]
         mock_ollama.list.return_value = mock_list_response
         mock_ollama.chat.return_value = {'message': {'content': mock_response}}
         
@@ -4347,7 +4375,7 @@ CTA?
         
         mock_ollama = MagicMock()
         mock_list_response = MagicMock()
-        mock_list_response.models = [MagicMock(model="qwen3-coder:30b")]
+        mock_list_response.models = [MagicMock(model="llama4:scout")]
         mock_ollama.list.return_value = mock_list_response
         mock_ollama.chat.return_value = {'message': {'content': mock_response}}
         
@@ -4361,3 +4389,3236 @@ CTA?
         # Verify logger name follows convention (src.engines.generator)
         generator_logs = [r for r in caplog.records if 'generator' in r.name]
         assert len(generator_logs) > 0, "Should have logs from generator module"
+
+
+# =============================================================================
+# Feature: prompt-builder-enhancements, Property 1: Hook Styles Present in Prompt
+# Validates: Requirements 1.1, 1.3, 1.4, 1.5
+# =============================================================================
+
+
+class TestHookStylesPresent:
+    """Property tests for hook styles in prompt.
+    
+    **Property 1: Hook Styles Present in Prompt**
+    
+    *For any* article input to PromptBuilder.build(), the resulting prompt SHALL contain
+    all three hook style names ("Bold Statement", "Contrarian View", "Fact-Driven") with
+    their corresponding descriptions ("A confident, declarative opening", 
+    "Challenge conventional wisdom", "Lead with a compelling statistic or data point").
+    
+    **Validates: Requirements 1.1, 1.3, 1.4, 1.5**
+    """
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_statistic_heavy_hook_style(self, article: ScoredArticle):
+        """For any article, the prompt SHALL contain Statistic-heavy hook style.
+        
+        **Validates: Requirements 4.1**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify Statistic-heavy hook style name is present
+        assert "Statistic-heavy" in prompt, (
+            "Prompt should contain 'Statistic-heavy' hook style name"
+        )
+        
+        # Verify Statistic-heavy description is present
+        assert "Lead with a compelling number or data point" in prompt, (
+            "Prompt should contain Statistic-heavy description: "
+            "'Lead with a compelling number or data point'"
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_contrarian_hook_style(self, article: ScoredArticle):
+        """For any article, the prompt SHALL contain Contrarian hook style.
+        
+        **Validates: Requirements 4.2**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify Contrarian hook style name is present
+        assert "Contrarian" in prompt, (
+            "Prompt should contain 'Contrarian' hook style name"
+        )
+        
+        # Verify Contrarian description is present
+        assert "Challenge conventional wisdom or common assumptions" in prompt, (
+            "Prompt should contain Contrarian description: "
+            "'Challenge conventional wisdom or common assumptions'"
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_bold_prediction_hook_style(self, article: ScoredArticle):
+        """For any article, the prompt SHALL contain Bold Prediction hook style.
+        
+        **Validates: Requirements 4.3**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify Bold Prediction hook style name is present
+        assert "Bold Prediction" in prompt, (
+            "Prompt should contain 'Bold Prediction' hook style name"
+        )
+        
+        # Verify Bold Prediction description is present
+        assert "Make a confident forecast about the future" in prompt, (
+            "Prompt should contain Bold Prediction description: "
+            "'Make a confident forecast about the future'"
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_all_three_hook_styles(self, article: ScoredArticle):
+        """For any article, the prompt SHALL contain all three hook styles with descriptions.
+        
+        **Validates: Requirements 4.1, 4.2, 4.3**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Define expected hook styles and their descriptions
+        expected_hook_styles = {
+            "Statistic-heavy": "Lead with a compelling number or data point",
+            "Contrarian": "Challenge conventional wisdom or common assumptions",
+            "Bold Prediction": "Make a confident forecast about the future",
+        }
+        
+        # Verify all hook styles and descriptions are present
+        for style_name, description in expected_hook_styles.items():
+            assert style_name in prompt, (
+                f"Prompt should contain hook style name '{style_name}'"
+            )
+            assert description in prompt, (
+                f"Prompt should contain description for {style_name}: '{description}'"
+            )
+
+
+# =============================================================================
+# Feature: prompt-builder-enhancements, Property 2: Avoid Question Instruction Present
+# Validates: Requirements 1.2
+# =============================================================================
+
+
+class TestAvoidQuestionInstruction:
+    """Property tests for avoid-question instruction in prompt.
+    
+    **Property 2: Avoid Question Instruction Present**
+    
+    *For any* article input to PromptBuilder.build(), the resulting prompt SHALL contain
+    an instruction to avoid starting with a question.
+    
+    **Validates: Requirements 1.2**
+    """
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_avoid_question_instruction(self, article: ScoredArticle):
+        """For any article, the prompt SHALL contain instruction to avoid starting with a question.
+        
+        **Validates: Requirements 1.2**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify the avoid-question instruction is present
+        assert "Avoid starting with a question" in prompt, (
+            "Prompt should contain instruction to avoid starting with a question"
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_vary_hook_style_instruction(self, article: ScoredArticle):
+        """For any article, the prompt SHALL contain instruction to vary hook style.
+        
+        **Validates: Requirements 1.2**
+        
+        Note: Updated to match robust-response-parsing spec which changed the text
+        from "Vary your hook style" to "Cycle through these hook styles to keep your feed fresh"
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify the vary hook style instruction is present (updated text from robust-response-parsing)
+        assert "Cycle through these hook styles" in prompt, (
+            "Prompt should contain instruction to cycle through hook styles"
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_important_avoid_question_instruction(self, article: ScoredArticle):
+        """For any article, the prompt SHALL contain the complete avoid-question instruction.
+        
+        **Validates: Requirements 1.2**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify the complete instruction is present
+        # The template contains: "IMPORTANT: Avoid starting with a question. Vary your hook style."
+        assert "IMPORTANT:" in prompt and "Avoid starting with a question" in prompt, (
+            "Prompt should contain the IMPORTANT instruction to avoid starting with a question"
+        )
+
+
+# =============================================================================
+# Feature: prompt-builder-enhancements, Property 3: Hashtag Limit Instruction Present
+# Validates: Requirements 2.1, 2.2, 2.3
+# =============================================================================
+
+
+class TestHashtagLimitInstruction:
+    """Property tests for hashtag limit instruction in prompt.
+    
+    **Property 3: Hashtag Limit Instruction Present**
+    
+    *For any* article input to PromptBuilder.build(), the resulting prompt SHALL contain
+    an instruction specifying exactly 3 hashtags must be included in the output.
+    
+    **Validates: Requirements 2.1, 2.2, 2.3**
+    """
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_exactly_3_hashtags_instruction(self, article: ScoredArticle):
+        """For any article, the prompt SHALL contain instruction for exactly 3 hashtags.
+        
+        **Validates: Requirements 2.1**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify the prompt contains instruction for exactly 3 hashtags
+        assert "EXACTLY 3 hashtags" in prompt, (
+            "Prompt should contain instruction for 'EXACTLY 3 hashtags'"
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_select_3_most_relevant_instruction(self, article: ScoredArticle):
+        """For any article, the prompt SHALL instruct to select 3 most relevant hashtags.
+        
+        **Validates: Requirements 2.2**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify the prompt contains instruction to select 3 most relevant
+        assert "3 most relevant" in prompt, (
+            "Prompt should contain instruction to select '3 most relevant' hashtags"
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_no_more_no_fewer_instruction(self, article: ScoredArticle):
+        """For any article, the prompt SHALL contain explicit hashtag limit instruction.
+        
+        **Validates: Requirements 2.3**
+        
+        Note: Updated to match robust-response-parsing spec which uses "EXACTLY 3 hashtags"
+        and "Include exactly 3 hashtags" instead of "no more, no fewer"
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify the prompt contains explicit instruction for exactly 3 hashtags
+        # The robust-response-parsing spec uses "EXACTLY 3 hashtags" and "Include exactly 3 hashtags"
+        assert "EXACTLY 3 hashtags" in prompt or "exactly 3 hashtags" in prompt.lower(), (
+            "Prompt should contain explicit instruction for exactly 3 hashtags"
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_must_include_exactly_3_hashtags(self, article: ScoredArticle):
+        """For any article, the prompt SHALL contain instruction for exactly 3 hashtags.
+        
+        **Validates: Requirements 2.1, 2.3**
+        
+        Note: Updated to match robust-response-parsing spec which uses "Include exactly 3 hashtags"
+        in the HASHTAG REQUIREMENT section instead of "MUST include exactly 3 hashtags"
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify the prompt contains instruction for exactly 3 hashtags
+        # The robust-response-parsing spec uses "Include exactly 3 hashtags" in HASHTAG REQUIREMENT section
+        assert "Include exactly 3 hashtags" in prompt or "EXACTLY 3 hashtags" in prompt, (
+            "Prompt should contain instruction for exactly 3 hashtags"
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_complete_hashtag_limit_instructions(self, article: ScoredArticle):
+        """For any article, the prompt SHALL contain all hashtag limit instructions.
+        
+        **Validates: Requirements 2.1, 2.2, 2.3**
+        
+        Note: Updated to match robust-response-parsing spec which uses different phrasing
+        for hashtag instructions
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify all hashtag limit instructions are present
+        # Requirement 2.1: Instruct LLM to output exactly 3 hashtags
+        assert "EXACTLY 3 hashtags" in prompt, (
+            "Prompt should contain 'EXACTLY 3 hashtags' instruction (Requirement 2.1)"
+        )
+        
+        # Requirement 2.2: Instruct to select 3 most relevant from provided list
+        assert "3 most relevant" in prompt, (
+            "Prompt should contain '3 most relevant' instruction (Requirement 2.2)"
+        )
+        
+        # Requirement 2.3: Explicit instruction for exactly 3 hashtags
+        # The robust-response-parsing spec uses "Include exactly 3 hashtags" instead of "no more, no fewer"
+        assert "exactly 3 hashtags" in prompt.lower(), (
+            "Prompt should contain 'exactly 3 hashtags' instruction (Requirement 2.3)"
+        )
+        
+        # Verify the HASHTAG REQUIREMENT section exists
+        assert "HASHTAG REQUIREMENT:" in prompt, (
+            "Prompt should contain 'HASHTAG REQUIREMENT:' section"
+        )
+
+
+# =============================================================================
+# Feature: prompt-builder-enhancements, Property 4: Validation Gate Filters Low-Score Articles
+# Validates: Requirements 3.1, 3.3, 3.4
+# =============================================================================
+
+
+from unittest.mock import patch, MagicMock
+from src.engines.generator import ContentGenerator, GeneratedPost, BatchResult
+
+
+class TestValidationGateFiltering:
+    """Property tests for validation gate filtering.
+    
+    **Property 4: Validation Gate Filters Low-Score Articles**
+    
+    *For any* list of ScoredArticle objects passed to generate_batch(), articles with
+    score_overall < 50 SHALL NOT be processed by the LLM, and the BatchResult.total_processed
+    SHALL equal only the count of articles with score_overall >= 50 that were attempted.
+    
+    **Validates: Requirements 3.1, 3.3, 3.4**
+    """
+
+    def _create_mock_generator(self):
+        """Create a ContentGenerator with mocked Ollama client."""
+        generator = ContentGenerator.__new__(ContentGenerator)
+        generator.model = "test-model"
+        generator.timeout = 120
+        generator.max_tokens = 10000
+        generator.num_ctx = 16384
+        generator._model_validated = True  # Skip model validation
+        
+        # Mock the internal components
+        generator._client = MagicMock()
+        generator._context_manager = MagicMock()
+        generator._prompt_builder = MagicMock()
+        
+        # Configure mocks to return valid responses
+        generator._context_manager.prepare_content.return_value = ("Test content", False)
+        generator._prompt_builder.build.return_value = "Test prompt"
+        generator._prompt_builder.get_system_prompt.return_value = "Test system prompt"
+        generator._client.chat.return_value = "Test LinkedIn post content\n\n#Test #Hashtag #Post"
+        
+        return generator
+
+    @given(articles=st.lists(scored_article_strategy(), min_size=1, max_size=5))
+    @settings(max_examples=100)
+    def test_low_score_articles_not_processed(self, articles: list):
+        """For any batch, articles with score_overall < 50 SHALL NOT be processed.
+        
+        **Validates: Requirements 3.1**
+        """
+        generator = self._create_mock_generator()
+        
+        # Count expected eligible articles (score >= 50)
+        eligible_count = sum(1 for a in articles if a.score_overall >= 50)
+        
+        result = generator.generate_batch(articles)
+        
+        # Verify total_processed only counts eligible articles
+        assert result.total_processed <= eligible_count, (
+            f"total_processed ({result.total_processed}) should not exceed "
+            f"eligible article count ({eligible_count})"
+        )
+        
+        # Verify the LLM was only called for eligible articles
+        expected_calls = eligible_count
+        actual_calls = generator._client.chat.call_count
+        assert actual_calls == expected_calls, (
+            f"LLM should be called {expected_calls} times for eligible articles, "
+            f"but was called {actual_calls} times"
+        )
+
+    @given(articles=st.lists(scored_article_strategy(), min_size=1, max_size=5))
+    @settings(max_examples=100)
+    def test_high_score_articles_are_processed(self, articles: list):
+        """For any batch, articles with score_overall >= 50 SHALL be processed.
+        
+        **Validates: Requirements 3.1**
+        """
+        generator = self._create_mock_generator()
+        
+        # Count expected eligible articles (score >= 50)
+        eligible_articles = [a for a in articles if a.score_overall >= 50]
+        eligible_count = len(eligible_articles)
+        
+        result = generator.generate_batch(articles)
+        
+        # If there are eligible articles, they should be processed
+        if eligible_count > 0:
+            assert result.total_processed == eligible_count, (
+                f"total_processed ({result.total_processed}) should equal "
+                f"eligible article count ({eligible_count})"
+            )
+            
+            # Verify successful + failed equals total_processed
+            assert len(result.successful) + len(result.failed) == result.total_processed, (
+                f"successful ({len(result.successful)}) + failed ({len(result.failed)}) "
+                f"should equal total_processed ({result.total_processed})"
+            )
+
+    @given(articles=st.lists(scored_article_strategy(), min_size=1, max_size=5))
+    @settings(max_examples=100)
+    def test_batch_result_total_processed_only_counts_eligible(self, articles: list):
+        """BatchResult.total_processed SHALL equal only the count of eligible articles.
+        
+        **Validates: Requirements 3.4**
+        """
+        generator = self._create_mock_generator()
+        
+        # Count expected eligible articles (score >= 50)
+        eligible_count = sum(1 for a in articles if a.score_overall >= 50)
+        
+        result = generator.generate_batch(articles)
+        
+        # total_processed should only count eligible articles that were attempted
+        assert result.total_processed == eligible_count, (
+            f"total_processed ({result.total_processed}) should equal "
+            f"eligible article count ({eligible_count})"
+        )
+
+    @given(articles=st.lists(scored_article_strategy(), min_size=1, max_size=5))
+    @settings(max_examples=100)
+    def test_skipped_articles_not_in_failed_list(self, articles: list):
+        """Skipped articles (score < 50) SHALL NOT appear in the failed list.
+        
+        **Validates: Requirements 3.3**
+        """
+        generator = self._create_mock_generator()
+        
+        # Get titles of low-score articles that should be skipped
+        skipped_titles = {a.title for a in articles if a.score_overall < 50}
+        
+        result = generator.generate_batch(articles)
+        
+        # Verify no skipped article titles appear in the failed list
+        failed_titles = {title for title, _ in result.failed}
+        
+        skipped_in_failed = skipped_titles & failed_titles
+        assert len(skipped_in_failed) == 0, (
+            f"Skipped articles should NOT appear in failed list. "
+            f"Found: {skipped_in_failed}"
+        )
+
+    @given(
+        low_score=st.floats(min_value=0.0, max_value=49.9),
+        high_score=st.floats(min_value=50.0, max_value=100.0),
+    )
+    @settings(max_examples=100)
+    def test_boundary_score_filtering(self, low_score: float, high_score: float):
+        """Articles at boundary scores SHALL be filtered correctly.
+        
+        Score < 50: NOT processed
+        Score >= 50: processed
+        
+        **Validates: Requirements 3.1**
+        """
+        generator = self._create_mock_generator()
+        
+        # Create articles with specific scores
+        low_score_article = ScoredArticle(
+            source="AWS News Blog",
+            title="Low Score Article",
+            url="https://aws.amazon.com/blogs/aws/low-score",
+            published_date=datetime.now(),
+            author="Test Author",
+            summary="Test summary for low score article",
+            key_topics=["cloud_security"],
+            why_it_matters="Test importance",
+            suggested_linkedin_angle="Test angle",
+            suggested_hashtags=["#Test"],
+            score_overall=low_score,
+            score_recency=50.0,
+            score_relevance=50.0,
+            collected_at=datetime.now(),
+        )
+        
+        high_score_article = ScoredArticle(
+            source="Microsoft Purview Blog",
+            title="High Score Article",
+            url="https://techcommunity.microsoft.com/blog/high-score",
+            published_date=datetime.now(),
+            author="Test Author",
+            summary="Test summary for high score article",
+            key_topics=["data_protection"],
+            why_it_matters="Test importance",
+            suggested_linkedin_angle="Test angle",
+            suggested_hashtags=["#Test"],
+            score_overall=high_score,
+            score_recency=50.0,
+            score_relevance=50.0,
+            collected_at=datetime.now(),
+        )
+        
+        articles = [low_score_article, high_score_article]
+        result = generator.generate_batch(articles)
+        
+        # Only the high score article should be processed
+        assert result.total_processed == 1, (
+            f"Only 1 article (high score) should be processed, got {result.total_processed}"
+        )
+        
+        # Low score article should not be in failed list
+        failed_titles = {title for title, _ in result.failed}
+        assert "Low Score Article" not in failed_titles, (
+            "Low score article should NOT appear in failed list"
+        )
+
+    def test_exact_threshold_boundary_processed(self):
+        """Article with score_overall = 50 (exact boundary) SHALL be processed.
+        
+        **Validates: Requirements 3.1**
+        """
+        generator = self._create_mock_generator()
+        
+        # Create article with exactly 50 score
+        boundary_article = ScoredArticle(
+            source="AWS News Blog",
+            title="Boundary Score Article",
+            url="https://aws.amazon.com/blogs/aws/boundary",
+            published_date=datetime.now(),
+            author="Test Author",
+            summary="Test summary for boundary score article",
+            key_topics=["cloud_security"],
+            why_it_matters="Test importance",
+            suggested_linkedin_angle="Test angle",
+            suggested_hashtags=["#Test"],
+            score_overall=50.0,  # Exact boundary
+            score_recency=50.0,
+            score_relevance=50.0,
+            collected_at=datetime.now(),
+        )
+        
+        result = generator.generate_batch([boundary_article])
+        
+        # Article with score = 50 should be processed
+        assert result.total_processed == 1, (
+            f"Article with score_overall=50 should be processed, got {result.total_processed}"
+        )
+
+    def test_just_below_threshold_not_processed(self):
+        """Article with score_overall = 49.9 (just below threshold) SHALL NOT be processed.
+        
+        **Validates: Requirements 3.1**
+        """
+        generator = self._create_mock_generator()
+        
+        # Create article with score just below threshold
+        below_threshold_article = ScoredArticle(
+            source="AWS News Blog",
+            title="Below Threshold Article",
+            url="https://aws.amazon.com/blogs/aws/below-threshold",
+            published_date=datetime.now(),
+            author="Test Author",
+            summary="Test summary for below threshold article",
+            key_topics=["cloud_security"],
+            why_it_matters="Test importance",
+            suggested_linkedin_angle="Test angle",
+            suggested_hashtags=["#Test"],
+            score_overall=49.9,  # Just below threshold
+            score_recency=50.0,
+            score_relevance=50.0,
+            collected_at=datetime.now(),
+        )
+        
+        result = generator.generate_batch([below_threshold_article])
+        
+        # Article with score = 49.9 should NOT be processed
+        assert result.total_processed == 0, (
+            f"Article with score_overall=49.9 should NOT be processed, got {result.total_processed}"
+        )
+        
+        # Should not appear in failed list either
+        assert len(result.failed) == 0, (
+            "Below-threshold article should NOT appear in failed list"
+        )
+
+    @given(articles=st.lists(scored_article_strategy(), min_size=0, max_size=5))
+    @settings(max_examples=100)
+    def test_empty_and_all_filtered_batches(self, articles: list):
+        """Empty batches and batches where all articles are filtered SHALL return valid BatchResult.
+        
+        **Validates: Requirements 3.4**
+        """
+        generator = self._create_mock_generator()
+        
+        result = generator.generate_batch(articles)
+        
+        # Result should always be a valid BatchResult
+        assert isinstance(result, BatchResult), "Result should be a BatchResult"
+        assert isinstance(result.successful, list), "successful should be a list"
+        assert isinstance(result.failed, list), "failed should be a list"
+        assert isinstance(result.total_processed, int), "total_processed should be an int"
+        assert isinstance(result.success_rate, float), "success_rate should be a float"
+        
+        # total_processed should match successful + failed
+        assert result.total_processed == len(result.successful) + len(result.failed), (
+            f"total_processed ({result.total_processed}) should equal "
+            f"successful ({len(result.successful)}) + failed ({len(result.failed)})"
+        )
+
+    @given(articles=st.lists(scored_article_strategy(), min_size=1, max_size=5))
+    @settings(max_examples=100)
+    def test_success_rate_calculated_from_processed_only(self, articles: list):
+        """Success rate SHALL be calculated from processed articles only, not total input.
+        
+        **Validates: Requirements 3.4**
+        """
+        generator = self._create_mock_generator()
+        
+        result = generator.generate_batch(articles)
+        
+        # Success rate should be based on total_processed, not len(articles)
+        if result.total_processed > 0:
+            expected_rate = len(result.successful) / result.total_processed
+            assert abs(result.success_rate - expected_rate) < 0.001, (
+                f"success_rate ({result.success_rate}) should equal "
+                f"successful/total_processed ({expected_rate})"
+            )
+        else:
+            # When no articles are processed, success_rate should be 0.0
+            assert result.success_rate == 0.0, (
+                f"success_rate should be 0.0 when no articles processed, got {result.success_rate}"
+            )
+
+
+# =============================================================================
+# Feature: prompt-builder-enhancements, Property 5: Skip Logging for Low-Score Articles
+# Validates: Requirements 3.2
+# =============================================================================
+
+
+class TestSkipLogging:
+    """Property tests for skip logging.
+    
+    **Property 5: Skip Logging for Low-Score Articles**
+    
+    *For any* article with score_overall < 50 in a batch, the system SHALL emit
+    a log message indicating the article was skipped due to low score.
+    
+    **Validates: Requirements 3.2**
+    """
+
+    def _create_mock_generator(self):
+        """Create a ContentGenerator with mocked Ollama client."""
+        generator = ContentGenerator.__new__(ContentGenerator)
+        generator.model = "test-model"
+        generator.timeout = 120
+        generator.max_tokens = 10000
+        generator.num_ctx = 16384
+        generator._model_validated = True  # Skip model validation
+        
+        # Mock the internal components
+        generator._client = MagicMock()
+        generator._context_manager = MagicMock()
+        generator._prompt_builder = MagicMock()
+        
+        # Configure mocks to return valid responses
+        generator._context_manager.prepare_content.return_value = ("Test content", False)
+        generator._prompt_builder.build.return_value = "Test prompt"
+        generator._prompt_builder.get_system_prompt.return_value = "Test system prompt"
+        generator._client.chat.return_value = "Test LinkedIn post content\n\n#Test #Hashtag #Post"
+        
+        return generator
+
+    @given(articles=st.lists(scored_article_strategy(), min_size=1, max_size=5))
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_skip_info_log_emitted_for_low_score_articles(self, articles: list, caplog):
+        """For any batch with low-score articles, an INFO log SHALL be emitted.
+        
+        **Validates: Requirements 3.2**
+        """
+        generator = self._create_mock_generator()
+        
+        # Count low-score articles
+        low_score_count = sum(1 for a in articles if a.score_overall < 50)
+        
+        # Clear any previous log records
+        caplog.clear()
+        
+        with caplog.at_level(logging.INFO, logger="src.engines.generator"):
+            generator.generate_batch(articles)
+        
+        if low_score_count > 0:
+            # Verify INFO log was emitted with count of skipped articles
+            info_messages = [
+                record.message for record in caplog.records
+                if record.levelno == logging.INFO
+                and "Skipped" in record.message
+                and "score_overall" in record.message
+            ]
+            
+            assert len(info_messages) >= 1, (
+                f"INFO log should be emitted when {low_score_count} articles are skipped. "
+                f"Log messages: {[r.message for r in caplog.records]}"
+            )
+            
+            # Verify the count is mentioned in the log
+            skip_log = info_messages[0]
+            assert str(low_score_count) in skip_log, (
+                f"INFO log should mention the count of skipped articles ({low_score_count}). "
+                f"Got: {skip_log}"
+            )
+
+    @given(articles=st.lists(scored_article_strategy(), min_size=1, max_size=5))
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_skip_debug_log_emitted_for_each_low_score_article(self, articles: list, caplog):
+        """For any batch with low-score articles, DEBUG logs SHALL be emitted for each.
+        
+        **Validates: Requirements 3.2**
+        """
+        generator = self._create_mock_generator()
+        
+        # Get low-score articles
+        low_score_articles = [a for a in articles if a.score_overall < 50]
+        
+        # Clear any previous log records
+        caplog.clear()
+        
+        with caplog.at_level(logging.DEBUG, logger="src.engines.generator"):
+            generator.generate_batch(articles)
+        
+        if len(low_score_articles) > 0:
+            # Verify DEBUG log was emitted for each skipped article
+            debug_messages = [
+                record.message for record in caplog.records
+                if record.levelno == logging.DEBUG
+                and "Skipped article" in record.message
+            ]
+            
+            assert len(debug_messages) >= len(low_score_articles), (
+                f"DEBUG log should be emitted for each of {len(low_score_articles)} "
+                f"skipped articles. Got {len(debug_messages)} debug messages."
+            )
+            
+            # Verify each skipped article's title appears in a debug log
+            for article in low_score_articles:
+                title_logged = any(
+                    article.title in msg for msg in debug_messages
+                )
+                assert title_logged, (
+                    f"DEBUG log should mention skipped article title '{article.title}'"
+                )
+
+    @given(articles=st.lists(scored_article_strategy(), min_size=1, max_size=5))
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_skip_debug_log_contains_score(self, articles: list, caplog):
+        """For any skipped article, DEBUG log SHALL contain its score.
+        
+        **Validates: Requirements 3.2**
+        """
+        generator = self._create_mock_generator()
+        
+        # Get low-score articles
+        low_score_articles = [a for a in articles if a.score_overall < 50]
+        
+        # Clear any previous log records
+        caplog.clear()
+        
+        with caplog.at_level(logging.DEBUG, logger="src.engines.generator"):
+            generator.generate_batch(articles)
+        
+        if len(low_score_articles) > 0:
+            # Verify DEBUG logs contain score information
+            debug_messages = [
+                record.message for record in caplog.records
+                if record.levelno == logging.DEBUG
+                and "Skipped article" in record.message
+            ]
+            
+            for article in low_score_articles:
+                # Find the debug message for this article
+                article_debug_msgs = [
+                    msg for msg in debug_messages if article.title in msg
+                ]
+                
+                if article_debug_msgs:
+                    # Verify score is mentioned in the log
+                    msg = article_debug_msgs[0]
+                    # Score should be formatted as X.X (one decimal place)
+                    score_str = f"{article.score_overall:.1f}"
+                    assert score_str in msg or "score_overall" in msg, (
+                        f"DEBUG log for '{article.title}' should contain score "
+                        f"({score_str}). Got: {msg}"
+                    )
+
+    @given(articles=st.lists(scored_article_strategy(), min_size=1, max_size=5))
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.function_scoped_fixture])
+    def test_no_skip_logs_when_all_articles_eligible(self, articles: list, caplog):
+        """When all articles are eligible (score >= 50), no skip logs SHALL be emitted.
+        
+        **Validates: Requirements 3.2**
+        """
+        generator = self._create_mock_generator()
+        
+        # Modify all articles to have high scores (>= 50)
+        high_score_articles = []
+        for article in articles:
+            # Create a new article with score >= 50
+            high_score_article = ScoredArticle(
+                source=article.source,
+                title=article.title,
+                url=article.url,
+                published_date=article.published_date,
+                author=article.author,
+                summary=article.summary,
+                key_topics=article.key_topics,
+                why_it_matters=article.why_it_matters,
+                suggested_linkedin_angle=article.suggested_linkedin_angle,
+                suggested_hashtags=article.suggested_hashtags,
+                score_overall=max(article.score_overall, 50.0),  # Ensure >= 50
+                score_recency=article.score_recency,
+                score_relevance=article.score_relevance,
+                collected_at=article.collected_at,
+            )
+            high_score_articles.append(high_score_article)
+        
+        # Clear any previous log records
+        caplog.clear()
+        
+        with caplog.at_level(logging.DEBUG, logger="src.engines.generator"):
+            generator.generate_batch(high_score_articles)
+        
+        # Verify no skip logs were emitted
+        skip_info_messages = [
+            record.message for record in caplog.records
+            if record.levelno == logging.INFO
+            and "Skipped" in record.message
+            and "score_overall" in record.message
+        ]
+        
+        skip_debug_messages = [
+            record.message for record in caplog.records
+            if record.levelno == logging.DEBUG
+            and "Skipped article" in record.message
+        ]
+        
+        assert len(skip_info_messages) == 0, (
+            f"No INFO skip logs should be emitted when all articles are eligible. "
+            f"Got: {skip_info_messages}"
+        )
+        
+        assert len(skip_debug_messages) == 0, (
+            f"No DEBUG skip logs should be emitted when all articles are eligible. "
+            f"Got: {skip_debug_messages}"
+        )
+
+    def test_skip_log_mentions_threshold_value(self, caplog):
+        """Skip log SHALL mention the threshold value (50).
+        
+        **Validates: Requirements 3.2**
+        """
+        generator = self._create_mock_generator()
+        
+        # Create a low-score article
+        low_score_article = ScoredArticle(
+            source="AWS News Blog",
+            title="Low Score Test Article",
+            url="https://aws.amazon.com/blogs/aws/low-score-test",
+            published_date=datetime.now(),
+            author="Test Author",
+            summary="Test summary for low score article",
+            key_topics=["cloud_security"],
+            why_it_matters="Test importance",
+            suggested_linkedin_angle="Test angle",
+            suggested_hashtags=["#Test"],
+            score_overall=30.0,  # Below threshold
+            score_recency=50.0,
+            score_relevance=50.0,
+            collected_at=datetime.now(),
+        )
+        
+        with caplog.at_level(logging.INFO, logger="src.engines.generator"):
+            generator.generate_batch([low_score_article])
+        
+        # Verify INFO log mentions the threshold
+        info_messages = [
+            record.message for record in caplog.records
+            if record.levelno == logging.INFO
+            and "Skipped" in record.message
+        ]
+        
+        assert len(info_messages) >= 1, "INFO skip log should be emitted"
+        
+        # Threshold value (50 or 50.0) should be mentioned
+        skip_log = info_messages[0]
+        assert "50" in skip_log, (
+            f"Skip log should mention threshold value (50). Got: {skip_log}"
+        )
+
+    def test_skip_log_format_matches_design(self, caplog):
+        """Skip logs SHALL follow the format specified in the design document.
+        
+        INFO: "Skipped {count} articles with score_overall < {threshold}"
+        DEBUG: "Skipped article '{title}' (score_overall={score} < {threshold})"
+        
+        **Validates: Requirements 3.2**
+        """
+        generator = self._create_mock_generator()
+        
+        # Create articles with specific scores
+        articles = [
+            ScoredArticle(
+                source="AWS News Blog",
+                title="Article One",
+                url="https://aws.amazon.com/blogs/aws/one",
+                published_date=datetime.now(),
+                author="Test Author",
+                summary="Test summary one",
+                key_topics=["cloud_security"],
+                why_it_matters="Test importance",
+                suggested_linkedin_angle="Test angle",
+                suggested_hashtags=["#Test"],
+                score_overall=25.5,  # Below threshold
+                score_recency=50.0,
+                score_relevance=50.0,
+                collected_at=datetime.now(),
+            ),
+            ScoredArticle(
+                source="Microsoft Purview Blog",
+                title="Article Two",
+                url="https://techcommunity.microsoft.com/blog/two",
+                published_date=datetime.now(),
+                author="Test Author",
+                summary="Test summary two",
+                key_topics=["data_protection"],
+                why_it_matters="Test importance",
+                suggested_linkedin_angle="Test angle",
+                suggested_hashtags=["#Test"],
+                score_overall=75.0,  # Above threshold
+                score_recency=50.0,
+                score_relevance=50.0,
+                collected_at=datetime.now(),
+            ),
+        ]
+        
+        with caplog.at_level(logging.DEBUG, logger="src.engines.generator"):
+            generator.generate_batch(articles)
+        
+        # Verify INFO log format
+        info_messages = [
+            record.message for record in caplog.records
+            if record.levelno == logging.INFO
+            and "Skipped" in record.message
+            and "score_overall" in record.message
+        ]
+        
+        assert len(info_messages) >= 1, "INFO skip log should be emitted"
+        info_log = info_messages[0]
+        
+        # Should contain count (1), "articles", "score_overall", and threshold
+        assert "1" in info_log, f"INFO log should mention count (1). Got: {info_log}"
+        assert "article" in info_log.lower(), f"INFO log should mention 'article'. Got: {info_log}"
+        assert "score_overall" in info_log, f"INFO log should mention 'score_overall'. Got: {info_log}"
+        
+        # Verify DEBUG log format
+        debug_messages = [
+            record.message for record in caplog.records
+            if record.levelno == logging.DEBUG
+            and "Skipped article" in record.message
+        ]
+        
+        assert len(debug_messages) >= 1, "DEBUG skip log should be emitted"
+        debug_log = debug_messages[0]
+        
+        # Should contain article title and score
+        assert "Article One" in debug_log, f"DEBUG log should mention article title. Got: {debug_log}"
+        assert "25.5" in debug_log, f"DEBUG log should mention score (25.5). Got: {debug_log}"
+
+
+# =============================================================================
+# Feature: robust-response-parsing, Property 1: Tag Extraction Round Trip
+# Validates: Requirements 3.1, 3.2, 3.3, 3.4, 6.1, 6.2, 6.3, 6.4, 6.5
+# =============================================================================
+
+
+class TestTagExtractionRoundTrip:
+    """Property tests for tag-based response parsing.
+    
+    **Property 1: Tag Extraction Round Trip**
+    
+    *For any* valid tagged response containing [HOOK], [VALUE], [CTA], and 
+    [HASHTAGS] sections, extracting each section and comparing to the original
+    content SHALL produce a match.
+    
+    **Validates: Requirements 3.1, 3.2, 3.3, 3.4, 6.1, 6.2, 6.3, 6.4, 6.5**
+    """
+    
+    @staticmethod
+    def _create_tagged_response(hook: str, value: str, cta: str, hashtags: str) -> str:
+        """Create a tagged response from individual sections.
+        
+        Args:
+            hook: The hook section content.
+            value: The value section content.
+            cta: The CTA section content.
+            hashtags: The hashtags section content.
+            
+        Returns:
+            A properly formatted tagged response string.
+        """
+        return (
+            f"[HOOK]{hook}[/HOOK]\n\n"
+            f"[VALUE]{value}[/VALUE]\n\n"
+            f"[CTA]{cta}[/CTA]\n\n"
+            f"[HASHTAGS]{hashtags}[/HASHTAGS]"
+        )
+    
+    @staticmethod
+    def _create_mock_generator():
+        """Create a ContentGenerator with mocked Ollama client for testing.
+        
+        Returns:
+            A ContentGenerator instance with mocked dependencies.
+        """
+        from unittest.mock import MagicMock, patch
+        import sys
+        
+        # Create a mock ollama module
+        mock_ollama = MagicMock()
+        mock_ollama.list.return_value = {"models": [{"name": "test-model"}]}
+        
+        with patch.dict(sys.modules, {'ollama': mock_ollama}):
+            from src.engines.generator import ContentGenerator
+            generator = ContentGenerator(model="test-model")
+            return generator
+
+    @given(
+        hook=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=200,
+        ),
+        value=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=20,
+            max_size=500,
+        ),
+        cta=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=150,
+        ),
+        hashtags=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=5,
+            max_size=50,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_hook_extraction_matches_original(
+        self, hook: str, value: str, cta: str, hashtags: str
+    ):
+        """For any tagged response, extracted hook SHALL match original hook content.
+        
+        **Validates: Requirements 3.1, 6.1**
+        """
+        # Skip if hook content is empty after stripping
+        assume(len(hook.strip()) > 0)
+        
+        generator = self._create_mock_generator()
+        
+        # Create tagged response
+        response = self._create_tagged_response(hook, value, cta, hashtags)
+        
+        # Extract the hook section
+        extracted_hook = generator._extract_tagged_section(response, "HOOK")
+        
+        # Verify extraction matches original (after stripping whitespace)
+        assert extracted_hook is not None, "Hook extraction should not return None"
+        assert extracted_hook == hook.strip(), (
+            f"Extracted hook should match original.\n"
+            f"Original: '{hook.strip()}'\n"
+            f"Extracted: '{extracted_hook}'"
+        )
+
+    @given(
+        hook=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=200,
+        ),
+        value=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=20,
+            max_size=500,
+        ),
+        cta=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=150,
+        ),
+        hashtags=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=5,
+            max_size=50,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_value_extraction_matches_original(
+        self, hook: str, value: str, cta: str, hashtags: str
+    ):
+        """For any tagged response, extracted value SHALL match original value content.
+        
+        **Validates: Requirements 3.2, 6.2**
+        """
+        # Skip if value content is empty after stripping
+        assume(len(value.strip()) > 0)
+        
+        generator = self._create_mock_generator()
+        
+        # Create tagged response
+        response = self._create_tagged_response(hook, value, cta, hashtags)
+        
+        # Extract the value section
+        extracted_value = generator._extract_tagged_section(response, "VALUE")
+        
+        # Verify extraction matches original (after stripping whitespace)
+        assert extracted_value is not None, "Value extraction should not return None"
+        assert extracted_value == value.strip(), (
+            f"Extracted value should match original.\n"
+            f"Original: '{value.strip()}'\n"
+            f"Extracted: '{extracted_value}'"
+        )
+
+    @given(
+        hook=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=200,
+        ),
+        value=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=20,
+            max_size=500,
+        ),
+        cta=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=150,
+        ),
+        hashtags=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=5,
+            max_size=50,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_cta_extraction_matches_original(
+        self, hook: str, value: str, cta: str, hashtags: str
+    ):
+        """For any tagged response, extracted CTA SHALL match original CTA content.
+        
+        **Validates: Requirements 3.3, 6.3**
+        """
+        # Skip if CTA content is empty after stripping
+        assume(len(cta.strip()) > 0)
+        
+        generator = self._create_mock_generator()
+        
+        # Create tagged response
+        response = self._create_tagged_response(hook, value, cta, hashtags)
+        
+        # Extract the CTA section
+        extracted_cta = generator._extract_tagged_section(response, "CTA")
+        
+        # Verify extraction matches original (after stripping whitespace)
+        assert extracted_cta is not None, "CTA extraction should not return None"
+        assert extracted_cta == cta.strip(), (
+            f"Extracted CTA should match original.\n"
+            f"Original: '{cta.strip()}'\n"
+            f"Extracted: '{extracted_cta}'"
+        )
+
+    @given(
+        hook=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=200,
+        ),
+        value=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=20,
+            max_size=500,
+        ),
+        cta=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=150,
+        ),
+        hashtags=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=5,
+            max_size=50,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_hashtags_extraction_matches_original(
+        self, hook: str, value: str, cta: str, hashtags: str
+    ):
+        """For any tagged response, extracted hashtags SHALL match original hashtags content.
+        
+        **Validates: Requirements 3.4, 6.4**
+        """
+        # Skip if hashtags content is empty after stripping
+        assume(len(hashtags.strip()) > 0)
+        
+        generator = self._create_mock_generator()
+        
+        # Create tagged response
+        response = self._create_tagged_response(hook, value, cta, hashtags)
+        
+        # Extract the hashtags section
+        extracted_hashtags = generator._extract_tagged_section(response, "HASHTAGS")
+        
+        # Verify extraction matches original (after stripping whitespace)
+        assert extracted_hashtags is not None, "Hashtags extraction should not return None"
+        assert extracted_hashtags == hashtags.strip(), (
+            f"Extracted hashtags should match original.\n"
+            f"Original: '{hashtags.strip()}'\n"
+            f"Extracted: '{extracted_hashtags}'"
+        )
+
+    @given(
+        hook=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=200,
+        ),
+        value=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=20,
+            max_size=500,
+        ),
+        cta=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=150,
+        ),
+        hashtags=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=5,
+            max_size=50,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_all_sections_round_trip(
+        self, hook: str, value: str, cta: str, hashtags: str
+    ):
+        """For any tagged response, all sections SHALL be extractable and match originals.
+        
+        This is the comprehensive round-trip test that validates the complete
+        tag extraction workflow for all four sections simultaneously.
+        
+        **Validates: Requirements 3.1, 3.2, 3.3, 3.4, 6.1, 6.2, 6.3, 6.4, 6.5**
+        """
+        # Skip if any content is empty after stripping
+        assume(len(hook.strip()) > 0)
+        assume(len(value.strip()) > 0)
+        assume(len(cta.strip()) > 0)
+        assume(len(hashtags.strip()) > 0)
+        
+        generator = self._create_mock_generator()
+        
+        # Create tagged response
+        response = self._create_tagged_response(hook, value, cta, hashtags)
+        
+        # Extract all sections
+        extracted_hook = generator._extract_tagged_section(response, "HOOK")
+        extracted_value = generator._extract_tagged_section(response, "VALUE")
+        extracted_cta = generator._extract_tagged_section(response, "CTA")
+        extracted_hashtags = generator._extract_tagged_section(response, "HASHTAGS")
+        
+        # Verify all extractions are successful
+        assert extracted_hook is not None, "Hook extraction should not return None"
+        assert extracted_value is not None, "Value extraction should not return None"
+        assert extracted_cta is not None, "CTA extraction should not return None"
+        assert extracted_hashtags is not None, "Hashtags extraction should not return None"
+        
+        # Verify all extractions match originals
+        assert extracted_hook == hook.strip(), (
+            f"Extracted hook should match original"
+        )
+        assert extracted_value == value.strip(), (
+            f"Extracted value should match original"
+        )
+        assert extracted_cta == cta.strip(), (
+            f"Extracted CTA should match original"
+        )
+        assert extracted_hashtags == hashtags.strip(), (
+            f"Extracted hashtags should match original"
+        )
+
+    @given(
+        hook=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=200,
+        ),
+        value=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=20,
+            max_size=500,
+        ),
+        cta=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=150,
+        ),
+        hashtags=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=5,
+            max_size=50,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_parse_response_extracts_all_sections(
+        self, hook: str, value: str, cta: str, hashtags: str
+    ):
+        """For any tagged response, _parse_response SHALL extract hook, value, and CTA.
+        
+        This tests the higher-level _parse_response method which uses the
+        tag extraction internally.
+        
+        **Validates: Requirements 3.1, 3.2, 3.3, 6.1, 6.2, 6.3, 6.5**
+        """
+        # Skip if any content is empty after stripping
+        assume(len(hook.strip()) > 0)
+        assume(len(value.strip()) > 0)
+        assume(len(cta.strip()) > 0)
+        
+        generator = self._create_mock_generator()
+        
+        # Create tagged response
+        response = self._create_tagged_response(hook, value, cta, hashtags)
+        
+        # Parse the response
+        parsed_hook, parsed_value, parsed_cta = generator._parse_response(response)
+        
+        # Verify all sections are extracted correctly
+        assert parsed_hook == hook.strip(), (
+            f"Parsed hook should match original.\n"
+            f"Original: '{hook.strip()}'\n"
+            f"Parsed: '{parsed_hook}'"
+        )
+        assert parsed_value == value.strip(), (
+            f"Parsed value should match original.\n"
+            f"Original: '{value.strip()}'\n"
+            f"Parsed: '{parsed_value}'"
+        )
+        assert parsed_cta == cta.strip(), (
+            f"Parsed CTA should match original.\n"
+            f"Original: '{cta.strip()}'\n"
+            f"Parsed: '{parsed_cta}'"
+        )
+
+    def test_tag_extraction_case_insensitive(self):
+        """Tag extraction SHALL be case-insensitive.
+        
+        **Validates: Requirements 3.1, 3.2, 3.3, 3.4**
+        """
+        generator = self._create_mock_generator()
+        
+        # Test with lowercase tags
+        lowercase_response = (
+            "[hook]Test hook content[/hook]\n\n"
+            "[value]Test value content[/value]\n\n"
+            "[cta]Test CTA content[/cta]\n\n"
+            "[hashtags]#Test #Hashtags[/hashtags]"
+        )
+        
+        assert generator._extract_tagged_section(lowercase_response, "HOOK") == "Test hook content"
+        assert generator._extract_tagged_section(lowercase_response, "VALUE") == "Test value content"
+        assert generator._extract_tagged_section(lowercase_response, "CTA") == "Test CTA content"
+        assert generator._extract_tagged_section(lowercase_response, "HASHTAGS") == "#Test #Hashtags"
+        
+        # Test with mixed case tags
+        mixed_case_response = (
+            "[Hook]Mixed case hook[/Hook]\n\n"
+            "[Value]Mixed case value[/Value]\n\n"
+            "[Cta]Mixed case CTA[/Cta]\n\n"
+            "[Hashtags]#Mixed #Case[/Hashtags]"
+        )
+        
+        assert generator._extract_tagged_section(mixed_case_response, "HOOK") == "Mixed case hook"
+        assert generator._extract_tagged_section(mixed_case_response, "VALUE") == "Mixed case value"
+        assert generator._extract_tagged_section(mixed_case_response, "CTA") == "Mixed case CTA"
+        assert generator._extract_tagged_section(mixed_case_response, "HASHTAGS") == "#Mixed #Case"
+
+    def test_tag_extraction_multiline_content(self):
+        """Tag extraction SHALL handle multiline content within tags.
+        
+        **Validates: Requirements 3.1, 3.2, 3.3, 3.4**
+        """
+        generator = self._create_mock_generator()
+        
+        multiline_response = (
+            "[HOOK]This is a hook\nwith multiple lines\nof content[/HOOK]\n\n"
+            "[VALUE]This is value content\n\nwith paragraph breaks\n\nand more text[/VALUE]\n\n"
+            "[CTA]Call to action\nacross lines[/CTA]\n\n"
+            "[HASHTAGS]#Tag1\n#Tag2\n#Tag3[/HASHTAGS]"
+        )
+        
+        extracted_hook = generator._extract_tagged_section(multiline_response, "HOOK")
+        extracted_value = generator._extract_tagged_section(multiline_response, "VALUE")
+        extracted_cta = generator._extract_tagged_section(multiline_response, "CTA")
+        extracted_hashtags = generator._extract_tagged_section(multiline_response, "HASHTAGS")
+        
+        assert "multiple lines" in extracted_hook
+        assert "paragraph breaks" in extracted_value
+        assert "across lines" in extracted_cta
+        assert "#Tag1" in extracted_hashtags and "#Tag3" in extracted_hashtags
+
+    def test_tag_extraction_returns_none_for_missing_tags(self):
+        """Tag extraction SHALL return None when tags are not present.
+        
+        **Validates: Requirements 3.5**
+        """
+        generator = self._create_mock_generator()
+        
+        # Response without any tags
+        no_tags_response = "This is just plain text without any tags."
+        
+        assert generator._extract_tagged_section(no_tags_response, "HOOK") is None
+        assert generator._extract_tagged_section(no_tags_response, "VALUE") is None
+        assert generator._extract_tagged_section(no_tags_response, "CTA") is None
+        assert generator._extract_tagged_section(no_tags_response, "HASHTAGS") is None
+
+    def test_tag_extraction_empty_response(self):
+        """Tag extraction SHALL handle empty response gracefully.
+        
+        **Validates: Requirements 3.1, 3.2, 3.3, 3.4**
+        """
+        generator = self._create_mock_generator()
+        
+        assert generator._extract_tagged_section("", "HOOK") is None
+        assert generator._extract_tagged_section(None, "HOOK") is None
+
+    def test_tag_extraction_empty_content_between_tags(self):
+        """Tag extraction SHALL return empty string for empty content between tags.
+        
+        **Validates: Requirements 3.1, 3.2, 3.3, 3.4**
+        """
+        generator = self._create_mock_generator()
+        
+        empty_content_response = "[HOOK][/HOOK]\n\n[VALUE][/VALUE]\n\n[CTA][/CTA]\n\n[HASHTAGS][/HASHTAGS]"
+        
+        assert generator._extract_tagged_section(empty_content_response, "HOOK") == ""
+        assert generator._extract_tagged_section(empty_content_response, "VALUE") == ""
+        assert generator._extract_tagged_section(empty_content_response, "CTA") == ""
+        assert generator._extract_tagged_section(empty_content_response, "HASHTAGS") == ""
+
+
+# =============================================================================
+# Feature: robust-response-parsing, Property 2: Filler Stripping Preserves Content
+# Validates: Requirements 3.6
+# =============================================================================
+
+
+class TestFillerStrippingPreservesContent:
+    """Property tests for filler stripping in response parsing.
+    
+    **Property 2: Filler Stripping Preserves Content**
+    
+    *For any* response with conversational filler before the [HOOK] tag,
+    the Response_Parser SHALL extract the same hook content as a response
+    without filler.
+    
+    **Validates: Requirements 3.6**
+    """
+    
+    @staticmethod
+    def _filler_prefix_strategy():
+        """Strategy for generating filler prefixes.
+        
+        Returns a Hypothesis strategy that produces common LLM conversational
+        filler patterns that may appear before the actual content.
+        """
+        return st.sampled_from([
+            "Here is the post:\n\n",
+            "Sure! Here's your LinkedIn post:\n\n",
+            "Certainly! I've created the following post:\n\n",
+            "Here you go:\n\n",
+            "Of course! Here's the LinkedIn post:\n\n",
+            "I'd be happy to help! Here's your post:\n\n",
+            "Absolutely! Here is the post:\n\n",
+            "Great! Here's the LinkedIn post I created:\n\n",
+            "",  # No filler case
+        ])
+    
+    @staticmethod
+    def _create_tagged_response(hook: str, value: str, cta: str, hashtags: str) -> str:
+        """Create a tagged response from individual sections.
+        
+        Args:
+            hook: The hook section content.
+            value: The value section content.
+            cta: The CTA section content.
+            hashtags: The hashtags section content.
+            
+        Returns:
+            A properly formatted tagged response string.
+        """
+        return (
+            f"[HOOK]{hook}[/HOOK]\n\n"
+            f"[VALUE]{value}[/VALUE]\n\n"
+            f"[CTA]{cta}[/CTA]\n\n"
+            f"[HASHTAGS]{hashtags}[/HASHTAGS]"
+        )
+    
+    @staticmethod
+    def _create_mock_generator():
+        """Create a ContentGenerator with mocked Ollama client for testing.
+        
+        Returns:
+            A ContentGenerator instance with mocked dependencies.
+        """
+        from unittest.mock import MagicMock, patch
+        import sys
+        
+        # Create a mock ollama module
+        mock_ollama = MagicMock()
+        mock_ollama.list.return_value = {"models": [{"name": "test-model"}]}
+        
+        with patch.dict(sys.modules, {'ollama': mock_ollama}):
+            from src.engines.generator import ContentGenerator
+            generator = ContentGenerator(model="test-model")
+            return generator
+
+    @given(
+        filler=st.sampled_from([
+            "Here is the post:\n\n",
+            "Sure! Here's your LinkedIn post:\n\n",
+            "Certainly! I've created the following post:\n\n",
+            "Here you go:\n\n",
+            "Of course! Here's the LinkedIn post:\n\n",
+            "I'd be happy to help! Here's your post:\n\n",
+            "Absolutely! Here is the post:\n\n",
+            "Great! Here's the LinkedIn post I created:\n\n",
+            "",  # No filler case
+        ]),
+        hook=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=200,
+        ),
+        value=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=20,
+            max_size=500,
+        ),
+        cta=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=150,
+        ),
+        hashtags=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=5,
+            max_size=50,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_filler_stripping_produces_same_hook_as_without_filler(
+        self, filler: str, hook: str, value: str, cta: str, hashtags: str
+    ):
+        """For any filler prefix, parsing SHALL extract same hook as without filler.
+        
+        **Validates: Requirements 3.6**
+        """
+        # Skip if hook content is empty after stripping
+        assume(len(hook.strip()) > 0)
+        
+        generator = self._create_mock_generator()
+        
+        # Create tagged response without filler
+        response_without_filler = self._create_tagged_response(hook, value, cta, hashtags)
+        
+        # Create tagged response with filler
+        response_with_filler = filler + response_without_filler
+        
+        # Parse both responses
+        hook_without_filler, _, _ = generator._parse_response(response_without_filler)
+        hook_with_filler, _, _ = generator._parse_response(response_with_filler)
+        
+        # Verify both produce the same hook content
+        assert hook_with_filler == hook_without_filler, (
+            f"Parsing with filler should produce same hook as without filler.\n"
+            f"Filler: '{filler}'\n"
+            f"Hook without filler: '{hook_without_filler}'\n"
+            f"Hook with filler: '{hook_with_filler}'"
+        )
+
+    @given(
+        filler=st.sampled_from([
+            "Here is the post:\n\n",
+            "Sure! Here's your LinkedIn post:\n\n",
+            "Certainly! I've created the following post:\n\n",
+            "Here you go:\n\n",
+            "Of course! Here's the LinkedIn post:\n\n",
+            "I'd be happy to help! Here's your post:\n\n",
+            "Absolutely! Here is the post:\n\n",
+            "Great! Here's the LinkedIn post I created:\n\n",
+            "",  # No filler case
+        ]),
+        hook=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=200,
+        ),
+        value=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=20,
+            max_size=500,
+        ),
+        cta=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=150,
+        ),
+        hashtags=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=5,
+            max_size=50,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_filler_stripping_produces_same_value_as_without_filler(
+        self, filler: str, hook: str, value: str, cta: str, hashtags: str
+    ):
+        """For any filler prefix, parsing SHALL extract same value as without filler.
+        
+        **Validates: Requirements 3.6**
+        """
+        # Skip if value content is empty after stripping
+        assume(len(value.strip()) > 0)
+        
+        generator = self._create_mock_generator()
+        
+        # Create tagged response without filler
+        response_without_filler = self._create_tagged_response(hook, value, cta, hashtags)
+        
+        # Create tagged response with filler
+        response_with_filler = filler + response_without_filler
+        
+        # Parse both responses
+        _, value_without_filler, _ = generator._parse_response(response_without_filler)
+        _, value_with_filler, _ = generator._parse_response(response_with_filler)
+        
+        # Verify both produce the same value content
+        assert value_with_filler == value_without_filler, (
+            f"Parsing with filler should produce same value as without filler.\n"
+            f"Filler: '{filler}'\n"
+            f"Value without filler: '{value_without_filler}'\n"
+            f"Value with filler: '{value_with_filler}'"
+        )
+
+    @given(
+        filler=st.sampled_from([
+            "Here is the post:\n\n",
+            "Sure! Here's your LinkedIn post:\n\n",
+            "Certainly! I've created the following post:\n\n",
+            "Here you go:\n\n",
+            "Of course! Here's the LinkedIn post:\n\n",
+            "I'd be happy to help! Here's your post:\n\n",
+            "Absolutely! Here is the post:\n\n",
+            "Great! Here's the LinkedIn post I created:\n\n",
+            "",  # No filler case
+        ]),
+        hook=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=200,
+        ),
+        value=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=20,
+            max_size=500,
+        ),
+        cta=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=150,
+        ),
+        hashtags=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=5,
+            max_size=50,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_filler_stripping_produces_same_cta_as_without_filler(
+        self, filler: str, hook: str, value: str, cta: str, hashtags: str
+    ):
+        """For any filler prefix, parsing SHALL extract same CTA as without filler.
+        
+        **Validates: Requirements 3.6**
+        """
+        # Skip if CTA content is empty after stripping
+        assume(len(cta.strip()) > 0)
+        
+        generator = self._create_mock_generator()
+        
+        # Create tagged response without filler
+        response_without_filler = self._create_tagged_response(hook, value, cta, hashtags)
+        
+        # Create tagged response with filler
+        response_with_filler = filler + response_without_filler
+        
+        # Parse both responses
+        _, _, cta_without_filler = generator._parse_response(response_without_filler)
+        _, _, cta_with_filler = generator._parse_response(response_with_filler)
+        
+        # Verify both produce the same CTA content
+        assert cta_with_filler == cta_without_filler, (
+            f"Parsing with filler should produce same CTA as without filler.\n"
+            f"Filler: '{filler}'\n"
+            f"CTA without filler: '{cta_without_filler}'\n"
+            f"CTA with filler: '{cta_with_filler}'"
+        )
+
+    @given(
+        filler=st.sampled_from([
+            "Here is the post:\n\n",
+            "Sure! Here's your LinkedIn post:\n\n",
+            "Certainly! I've created the following post:\n\n",
+            "Here you go:\n\n",
+            "Of course! Here's the LinkedIn post:\n\n",
+            "I'd be happy to help! Here's your post:\n\n",
+            "Absolutely! Here is the post:\n\n",
+            "Great! Here's the LinkedIn post I created:\n\n",
+            "",  # No filler case
+        ]),
+        hook=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=200,
+        ),
+        value=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=20,
+            max_size=500,
+        ),
+        cta=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=150,
+        ),
+        hashtags=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=5,
+            max_size=50,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_filler_stripping_produces_same_full_parse_result(
+        self, filler: str, hook: str, value: str, cta: str, hashtags: str
+    ):
+        """For any filler prefix, parsing SHALL produce identical results as without filler.
+        
+        **Validates: Requirements 3.6**
+        """
+        # Skip if any content is empty after stripping
+        assume(len(hook.strip()) > 0)
+        assume(len(value.strip()) > 0)
+        assume(len(cta.strip()) > 0)
+        
+        generator = self._create_mock_generator()
+        
+        # Create tagged response without filler
+        response_without_filler = self._create_tagged_response(hook, value, cta, hashtags)
+        
+        # Create tagged response with filler
+        response_with_filler = filler + response_without_filler
+        
+        # Parse both responses
+        result_without_filler = generator._parse_response(response_without_filler)
+        result_with_filler = generator._parse_response(response_with_filler)
+        
+        # Verify both produce identical results
+        assert result_with_filler == result_without_filler, (
+            f"Parsing with filler should produce identical result as without filler.\n"
+            f"Filler: '{filler}'\n"
+            f"Result without filler: {result_without_filler}\n"
+            f"Result with filler: {result_with_filler}"
+        )
+
+    def test_strip_filler_before_hook_removes_common_fillers(self):
+        """_strip_filler_before_hook SHALL remove common conversational fillers.
+        
+        **Validates: Requirements 3.6**
+        """
+        generator = self._create_mock_generator()
+        
+        # Test various filler patterns
+        test_cases = [
+            ("Here is the post:\n\n[HOOK]Test[/HOOK]", "[HOOK]Test[/HOOK]"),
+            ("Sure! Here's your LinkedIn post:\n\n[HOOK]Test[/HOOK]", "[HOOK]Test[/HOOK]"),
+            ("Certainly! I've created the following post:\n\n[HOOK]Test[/HOOK]", "[HOOK]Test[/HOOK]"),
+            ("Here you go:\n\n[HOOK]Test[/HOOK]", "[HOOK]Test[/HOOK]"),
+            ("[HOOK]Test[/HOOK]", "[HOOK]Test[/HOOK]"),  # No filler case
+        ]
+        
+        for input_text, expected_start in test_cases:
+            result = generator._strip_filler_before_hook(input_text)
+            assert result.startswith("[HOOK]"), (
+                f"Result should start with [HOOK] after stripping filler.\n"
+                f"Input: '{input_text}'\n"
+                f"Result: '{result}'"
+            )
+
+    def test_strip_filler_before_hook_preserves_content_after_hook(self):
+        """_strip_filler_before_hook SHALL preserve all content from [HOOK] onwards.
+        
+        **Validates: Requirements 3.6**
+        """
+        generator = self._create_mock_generator()
+        
+        content_after_hook = "[HOOK]Hook content[/HOOK]\n\n[VALUE]Value content[/VALUE]"
+        filler = "Here is the post:\n\n"
+        
+        result = generator._strip_filler_before_hook(filler + content_after_hook)
+        
+        assert result == content_after_hook, (
+            f"Content after [HOOK] should be preserved exactly.\n"
+            f"Expected: '{content_after_hook}'\n"
+            f"Got: '{result}'"
+        )
+
+    def test_strip_filler_before_hook_handles_no_hook_tag(self):
+        """_strip_filler_before_hook SHALL return original response when no [HOOK] tag present.
+        
+        **Validates: Requirements 3.6**
+        """
+        generator = self._create_mock_generator()
+        
+        # Response without [HOOK] tag should be returned unchanged
+        no_hook_response = "This is a response without any tags."
+        
+        result = generator._strip_filler_before_hook(no_hook_response)
+        
+        assert result == no_hook_response, (
+            f"Response without [HOOK] should be returned unchanged.\n"
+            f"Expected: '{no_hook_response}'\n"
+            f"Got: '{result}'"
+        )
+
+    def test_strip_filler_before_hook_handles_empty_response(self):
+        """_strip_filler_before_hook SHALL handle empty response gracefully.
+        
+        **Validates: Requirements 3.6**
+        """
+        generator = self._create_mock_generator()
+        
+        assert generator._strip_filler_before_hook("") == ""
+        assert generator._strip_filler_before_hook(None) is None
+
+    def test_strip_filler_before_hook_case_insensitive(self):
+        """_strip_filler_before_hook SHALL handle [HOOK] tag case-insensitively.
+        
+        **Validates: Requirements 3.6**
+        """
+        generator = self._create_mock_generator()
+        
+        # Test various case variations
+        test_cases = [
+            "Here is the post:\n\n[HOOK]Test[/HOOK]",
+            "Here is the post:\n\n[hook]Test[/hook]",
+            "Here is the post:\n\n[Hook]Test[/Hook]",
+            "Here is the post:\n\n[HOOK]Test[/HOOK]",
+        ]
+        
+        for input_text in test_cases:
+            result = generator._strip_filler_before_hook(input_text)
+            # Result should start with the [HOOK] tag (in whatever case it was)
+            assert "[" in result and "hook" in result.lower(), (
+                f"Result should contain [HOOK] tag (case-insensitive).\n"
+                f"Input: '{input_text}'\n"
+                f"Result: '{result}'"
+            )
+
+
+# =============================================================================
+# Feature: robust-response-parsing, Property 3: Fallback Parsing Consistency
+# Validates: Requirements 3.5, 5.2
+# =============================================================================
+
+
+class TestFallbackParsingConsistency:
+    """Property tests for fallback parsing consistency.
+    
+    **Property 3: Fallback Parsing Consistency**
+    
+    *For any* response without explicit tags, the Response_Parser SHALL produce
+    the same output as the original paragraph-based parser.
+    
+    This validates backward compatibility - when tags are missing, the new
+    _parse_response method should fall back to _parse_response_paragraphs
+    and produce identical results.
+    
+    **Validates: Requirements 3.5, 5.2**
+    """
+    
+    @staticmethod
+    def _create_mock_generator():
+        """Create a ContentGenerator with mocked Ollama client for testing.
+        
+        Returns:
+            A ContentGenerator instance with mocked dependencies.
+        """
+        from unittest.mock import MagicMock, patch
+        import sys
+        
+        # Create a mock ollama module
+        mock_ollama = MagicMock()
+        mock_ollama.list.return_value = {"models": [{"name": "test-model"}]}
+        
+        with patch.dict(sys.modules, {'ollama': mock_ollama}):
+            from src.engines.generator import ContentGenerator
+            generator = ContentGenerator(model="test-model")
+            return generator
+    
+    @staticmethod
+    def _create_untagged_response(hook: str, value: str, cta: str, hashtags: str) -> str:
+        """Create an untagged paragraph-based response.
+        
+        This simulates the format that an LLM might produce without explicit tags,
+        which is the format the original paragraph-based parser was designed to handle.
+        
+        Args:
+            hook: The hook section content (first paragraph).
+            value: The value section content (middle paragraphs).
+            cta: The CTA section content (last paragraph before hashtags).
+            hashtags: The hashtags to append at the end.
+            
+        Returns:
+            A paragraph-based response string without explicit tags.
+        """
+        # Build the response with paragraphs separated by blank lines
+        parts = []
+        
+        if hook.strip():
+            parts.append(hook.strip())
+        
+        if value.strip():
+            parts.append(value.strip())
+        
+        if cta.strip():
+            parts.append(cta.strip())
+        
+        # Join paragraphs with double newlines
+        content = "\n\n".join(parts)
+        
+        # Add hashtags at the end if provided
+        if hashtags.strip():
+            content += "\n\n" + hashtags.strip()
+        
+        return content
+
+    @given(
+        hook=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=200,
+        ),
+        value=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=20,
+            max_size=500,
+        ),
+        cta=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=150,
+        ),
+        hashtags=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=5,
+            max_size=50,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_untagged_response_uses_paragraph_fallback(
+        self, hook: str, value: str, cta: str, hashtags: str
+    ):
+        """For any untagged response, _parse_response SHALL produce same result as _parse_response_paragraphs.
+        
+        **Validates: Requirements 3.5, 5.2**
+        """
+        # Skip if any content is empty after stripping
+        assume(len(hook.strip()) > 0)
+        assume(len(value.strip()) > 0)
+        assume(len(cta.strip()) > 0)
+        
+        generator = self._create_mock_generator()
+        
+        # Create untagged response (paragraph-based format)
+        untagged_response = self._create_untagged_response(hook, value, cta, hashtags)
+        
+        # Parse using both methods
+        result_parse_response = generator._parse_response(untagged_response)
+        result_paragraph_parser = generator._parse_response_paragraphs(untagged_response)
+        
+        # Verify both produce the same result
+        assert result_parse_response == result_paragraph_parser, (
+            f"_parse_response should produce same result as _parse_response_paragraphs for untagged content.\n"
+            f"Untagged response:\n{untagged_response}\n\n"
+            f"_parse_response result: {result_parse_response}\n"
+            f"_parse_response_paragraphs result: {result_paragraph_parser}"
+        )
+
+    @given(
+        hook=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=200,
+        ),
+        value=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=20,
+            max_size=500,
+        ),
+        cta=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=150,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_untagged_response_hook_matches_paragraph_parser(
+        self, hook: str, value: str, cta: str
+    ):
+        """For any untagged response, hook from _parse_response SHALL match _parse_response_paragraphs.
+        
+        **Validates: Requirements 3.5, 5.2**
+        """
+        # Skip if any content is empty after stripping
+        assume(len(hook.strip()) > 0)
+        assume(len(value.strip()) > 0)
+        assume(len(cta.strip()) > 0)
+        
+        generator = self._create_mock_generator()
+        
+        # Create untagged response without hashtags
+        untagged_response = self._create_untagged_response(hook, value, cta, "")
+        
+        # Parse using both methods
+        hook_from_parse_response, _, _ = generator._parse_response(untagged_response)
+        hook_from_paragraph_parser, _, _ = generator._parse_response_paragraphs(untagged_response)
+        
+        # Verify hooks match
+        assert hook_from_parse_response == hook_from_paragraph_parser, (
+            f"Hook from _parse_response should match _parse_response_paragraphs.\n"
+            f"Hook from _parse_response: '{hook_from_parse_response}'\n"
+            f"Hook from _parse_response_paragraphs: '{hook_from_paragraph_parser}'"
+        )
+
+    @given(
+        hook=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=200,
+        ),
+        value=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=20,
+            max_size=500,
+        ),
+        cta=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=150,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_untagged_response_value_matches_paragraph_parser(
+        self, hook: str, value: str, cta: str
+    ):
+        """For any untagged response, value from _parse_response SHALL match _parse_response_paragraphs.
+        
+        **Validates: Requirements 3.5, 5.2**
+        """
+        # Skip if any content is empty after stripping
+        assume(len(hook.strip()) > 0)
+        assume(len(value.strip()) > 0)
+        assume(len(cta.strip()) > 0)
+        
+        generator = self._create_mock_generator()
+        
+        # Create untagged response without hashtags
+        untagged_response = self._create_untagged_response(hook, value, cta, "")
+        
+        # Parse using both methods
+        _, value_from_parse_response, _ = generator._parse_response(untagged_response)
+        _, value_from_paragraph_parser, _ = generator._parse_response_paragraphs(untagged_response)
+        
+        # Verify values match
+        assert value_from_parse_response == value_from_paragraph_parser, (
+            f"Value from _parse_response should match _parse_response_paragraphs.\n"
+            f"Value from _parse_response: '{value_from_parse_response}'\n"
+            f"Value from _parse_response_paragraphs: '{value_from_paragraph_parser}'"
+        )
+
+    @given(
+        hook=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=200,
+        ),
+        value=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=20,
+            max_size=500,
+        ),
+        cta=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=150,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_untagged_response_cta_matches_paragraph_parser(
+        self, hook: str, value: str, cta: str
+    ):
+        """For any untagged response, CTA from _parse_response SHALL match _parse_response_paragraphs.
+        
+        **Validates: Requirements 3.5, 5.2**
+        """
+        # Skip if any content is empty after stripping
+        assume(len(hook.strip()) > 0)
+        assume(len(value.strip()) > 0)
+        assume(len(cta.strip()) > 0)
+        
+        generator = self._create_mock_generator()
+        
+        # Create untagged response without hashtags
+        untagged_response = self._create_untagged_response(hook, value, cta, "")
+        
+        # Parse using both methods
+        _, _, cta_from_parse_response = generator._parse_response(untagged_response)
+        _, _, cta_from_paragraph_parser = generator._parse_response_paragraphs(untagged_response)
+        
+        # Verify CTAs match
+        assert cta_from_parse_response == cta_from_paragraph_parser, (
+            f"CTA from _parse_response should match _parse_response_paragraphs.\n"
+            f"CTA from _parse_response: '{cta_from_parse_response}'\n"
+            f"CTA from _parse_response_paragraphs: '{cta_from_paragraph_parser}'"
+        )
+
+    @given(
+        single_paragraph=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=20,
+            max_size=500,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_single_paragraph_fallback_consistency(self, single_paragraph: str):
+        """For single paragraph responses, _parse_response SHALL match _parse_response_paragraphs.
+        
+        **Validates: Requirements 3.5, 5.2**
+        """
+        # Skip if content is empty after stripping
+        assume(len(single_paragraph.strip()) > 0)
+        
+        generator = self._create_mock_generator()
+        
+        # Single paragraph response (no blank lines)
+        response = single_paragraph.strip()
+        
+        # Parse using both methods
+        result_parse_response = generator._parse_response(response)
+        result_paragraph_parser = generator._parse_response_paragraphs(response)
+        
+        # Verify both produce the same result
+        assert result_parse_response == result_paragraph_parser, (
+            f"Single paragraph should produce same result from both parsers.\n"
+            f"Response: '{response}'\n"
+            f"_parse_response result: {result_parse_response}\n"
+            f"_parse_response_paragraphs result: {result_paragraph_parser}"
+        )
+
+    @given(
+        para1=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=200,
+        ),
+        para2=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=10,
+            max_size=200,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_two_paragraph_fallback_consistency(self, para1: str, para2: str):
+        """For two paragraph responses, _parse_response SHALL match _parse_response_paragraphs.
+        
+        **Validates: Requirements 3.5, 5.2**
+        """
+        # Skip if any content is empty after stripping
+        assume(len(para1.strip()) > 0)
+        assume(len(para2.strip()) > 0)
+        
+        generator = self._create_mock_generator()
+        
+        # Two paragraph response
+        response = f"{para1.strip()}\n\n{para2.strip()}"
+        
+        # Parse using both methods
+        result_parse_response = generator._parse_response(response)
+        result_paragraph_parser = generator._parse_response_paragraphs(response)
+        
+        # Verify both produce the same result
+        assert result_parse_response == result_paragraph_parser, (
+            f"Two paragraph response should produce same result from both parsers.\n"
+            f"Response: '{response}'\n"
+            f"_parse_response result: {result_parse_response}\n"
+            f"_parse_response_paragraphs result: {result_paragraph_parser}"
+        )
+
+    @given(
+        paragraphs=st.lists(
+            st.text(
+                alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+                min_size=10,
+                max_size=150,
+            ),
+            min_size=3,
+            max_size=6,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_multi_paragraph_fallback_consistency(self, paragraphs: list):
+        """For multi-paragraph responses, _parse_response SHALL match _parse_response_paragraphs.
+        
+        **Validates: Requirements 3.5, 5.2**
+        """
+        # Filter out empty paragraphs
+        non_empty_paragraphs = [p.strip() for p in paragraphs if p.strip()]
+        
+        # Skip if we don't have at least 3 non-empty paragraphs
+        assume(len(non_empty_paragraphs) >= 3)
+        
+        generator = self._create_mock_generator()
+        
+        # Multi-paragraph response
+        response = "\n\n".join(non_empty_paragraphs)
+        
+        # Parse using both methods
+        result_parse_response = generator._parse_response(response)
+        result_paragraph_parser = generator._parse_response_paragraphs(response)
+        
+        # Verify both produce the same result
+        assert result_parse_response == result_paragraph_parser, (
+            f"Multi-paragraph response should produce same result from both parsers.\n"
+            f"Response: '{response}'\n"
+            f"_parse_response result: {result_parse_response}\n"
+            f"_parse_response_paragraphs result: {result_paragraph_parser}"
+        )
+
+    @given(
+        content=st.text(
+            alphabet=st.characters(whitelist_categories=('L', 'N', 'P', 'Z')),
+            min_size=50,
+            max_size=500,
+        ),
+        hashtags=st.lists(
+            st.sampled_from([
+                "#CloudSecurity",
+                "#AWS",
+                "#Azure",
+                "#Purview",
+                "#CyberSecurity",
+                "#DataGovernance",
+                "#Compliance",
+                "#ZeroTrust",
+            ]),
+            min_size=1,
+            max_size=5,
+            unique=True,
+        ),
+    )
+    @settings(max_examples=100, suppress_health_check=[HealthCheck.too_slow])
+    def test_response_with_hashtags_fallback_consistency(
+        self, content: str, hashtags: list
+    ):
+        """For responses with hashtags, _parse_response SHALL match _parse_response_paragraphs.
+        
+        **Validates: Requirements 3.5, 5.2**
+        """
+        # Skip if content is empty after stripping
+        assume(len(content.strip()) > 0)
+        
+        generator = self._create_mock_generator()
+        
+        # Response with hashtags at the end
+        hashtag_str = " ".join(hashtags)
+        response = f"{content.strip()}\n\n{hashtag_str}"
+        
+        # Parse using both methods
+        result_parse_response = generator._parse_response(response)
+        result_paragraph_parser = generator._parse_response_paragraphs(response)
+        
+        # Verify both produce the same result
+        assert result_parse_response == result_paragraph_parser, (
+            f"Response with hashtags should produce same result from both parsers.\n"
+            f"Response: '{response}'\n"
+            f"_parse_response result: {result_parse_response}\n"
+            f"_parse_response_paragraphs result: {result_paragraph_parser}"
+        )
+
+    def test_empty_response_fallback_consistency(self):
+        """Empty response SHALL produce same result from both parsers.
+        
+        **Validates: Requirements 3.5, 5.2**
+        """
+        generator = self._create_mock_generator()
+        
+        # Empty response
+        response = ""
+        
+        # Parse using both methods
+        result_parse_response = generator._parse_response(response)
+        result_paragraph_parser = generator._parse_response_paragraphs(response)
+        
+        # Verify both produce the same result
+        assert result_parse_response == result_paragraph_parser, (
+            f"Empty response should produce same result from both parsers.\n"
+            f"_parse_response result: {result_parse_response}\n"
+            f"_parse_response_paragraphs result: {result_paragraph_parser}"
+        )
+
+    def test_whitespace_only_response_fallback_consistency(self):
+        """Whitespace-only response SHALL produce same result from both parsers.
+        
+        **Validates: Requirements 3.5, 5.2**
+        """
+        generator = self._create_mock_generator()
+        
+        # Whitespace-only responses
+        test_cases = ["   ", "\n\n\n", "\t\t", "  \n  \n  "]
+        
+        for response in test_cases:
+            result_parse_response = generator._parse_response(response)
+            result_paragraph_parser = generator._parse_response_paragraphs(response)
+            
+            assert result_parse_response == result_paragraph_parser, (
+                f"Whitespace-only response should produce same result from both parsers.\n"
+                f"Response: '{repr(response)}'\n"
+                f"_parse_response result: {result_parse_response}\n"
+                f"_parse_response_paragraphs result: {result_paragraph_parser}"
+            )
+
+    def test_linkedin_style_post_without_tags_fallback_consistency(self):
+        """LinkedIn-style post without tags SHALL produce same result from both parsers.
+        
+        **Validates: Requirements 3.5, 5.2**
+        """
+        generator = self._create_mock_generator()
+        
+        # Realistic LinkedIn post without explicit tags
+        linkedin_post = """🔐 85% of enterprises will adopt zero trust by 2025.
+
+AWS just announced enhanced security controls for IAM that make zero trust implementation significantly easier. The new features include:
+- Granular permission boundaries
+- Automated least-privilege recommendations
+- Real-time access analytics
+
+For security leaders in regulated industries, this means faster compliance audits and reduced attack surface.
+
+What's your biggest challenge with zero trust adoption? Share your experience below!
+
+#CloudSecurity #AWS #ZeroTrust"""
+        
+        # Parse using both methods
+        result_parse_response = generator._parse_response(linkedin_post)
+        result_paragraph_parser = generator._parse_response_paragraphs(linkedin_post)
+        
+        # Verify both produce the same result
+        assert result_parse_response == result_paragraph_parser, (
+            f"LinkedIn-style post should produce same result from both parsers.\n"
+            f"_parse_response result: {result_parse_response}\n"
+            f"_parse_response_paragraphs result: {result_paragraph_parser}"
+        )
+
+    def test_realistic_untagged_post_formats(self):
+        """Various realistic untagged post formats SHALL produce consistent results.
+        
+        **Validates: Requirements 3.5, 5.2**
+        """
+        generator = self._create_mock_generator()
+        
+        # Various realistic post formats without tags
+        test_posts = [
+            # Format 1: Hook + Value + CTA + Hashtags
+            """The future of cloud security is autonomous.
+
+Microsoft Purview now offers AI-powered data classification that reduces manual effort by 70%. This is a game-changer for compliance teams struggling with data sprawl.
+
+Key benefits:
+- Automated sensitive data discovery
+- Real-time policy enforcement
+- Unified governance dashboard
+
+Ready to modernize your data governance? Start with a pilot in your most regulated workloads.
+
+#DataGovernance #Purview #Compliance""",
+            
+            # Format 2: Short hook + detailed value + CTA
+            """Contrarian take: Most cloud migrations fail because of security, not technology.
+
+Here's what I've learned from 50+ enterprise migrations:
+
+1. Security teams are brought in too late
+2. Compliance requirements aren't mapped upfront
+3. Identity management is an afterthought
+
+The fix? Embed security from day one. AWS's new Well-Architected Security Pillar makes this easier than ever.
+
+What's been your experience? Drop a comment below.
+
+#CloudSecurity #AWS #Migration""",
+            
+            # Format 3: Bold prediction + supporting evidence + engagement
+            """By 2026, 90% of security incidents will involve misconfigured cloud resources.
+
+The data is clear: human error remains the #1 cause of breaches. But there's hope.
+
+AWS Config and Azure Policy now offer automated remediation that catches misconfigurations before they become vulnerabilities. For CISOs, this means:
+- Reduced mean time to remediation
+- Continuous compliance monitoring
+- Audit-ready documentation
+
+Are you using automated remediation? I'd love to hear what's working for your team.
+
+#CyberSecurity #CloudSecurity #Automation""",
+        ]
+        
+        for post in test_posts:
+            result_parse_response = generator._parse_response(post)
+            result_paragraph_parser = generator._parse_response_paragraphs(post)
+            
+            assert result_parse_response == result_paragraph_parser, (
+                f"Realistic post format should produce same result from both parsers.\n"
+                f"Post:\n{post}\n\n"
+                f"_parse_response result: {result_parse_response}\n"
+                f"_parse_response_paragraphs result: {result_paragraph_parser}"
+            )
+
+
+# =============================================================================
+# Feature: robust-response-parsing, Property 5: No-Filler Instruction Present
+# Validates: Requirements 1.1, 1.2
+# =============================================================================
+
+
+class TestNoFillerInstructionPresent:
+    """Property tests for no-filler instruction presence in system prompt.
+    
+    **Property 5: No-Filler Instruction Present**
+    
+    *For any* call to PromptBuilder.get_system_prompt(), the returned prompt
+    SHALL contain an instruction forbidding conversational filler.
+    
+    **Validates: Requirements 1.1, 1.2**
+    
+    Requirements:
+        - 1.1: THE System_Prompt SHALL include an explicit instruction forbidding
+               conversational filler such as "Here is the post:", "Sure!", or
+               similar preambles
+        - 1.2: THE System_Prompt SHALL instruct the model to begin output
+               immediately with the [HOOK] tag
+    """
+
+    def test_system_prompt_contains_never_use_filler_instruction(self):
+        """System prompt SHALL contain instruction to NEVER use conversational filler.
+        
+        **Validates: Requirements 1.1**
+        """
+        builder = PromptBuilder()
+        
+        system_prompt = builder.get_system_prompt()
+        
+        # Verify the system prompt contains the no-filler instruction
+        assert "NEVER use conversational filler" in system_prompt, (
+            "System prompt should contain 'NEVER use conversational filler' instruction.\n"
+            f"Actual system prompt:\n{system_prompt}"
+        )
+
+    def test_system_prompt_contains_begin_immediately_with_hook_instruction(self):
+        """System prompt SHALL instruct model to begin output immediately with [HOOK] tag.
+        
+        **Validates: Requirements 1.2**
+        """
+        builder = PromptBuilder()
+        
+        system_prompt = builder.get_system_prompt()
+        
+        # Verify the system prompt contains the instruction to begin with [HOOK]
+        assert "Begin your output IMMEDIATELY with the [HOOK] tag" in system_prompt, (
+            "System prompt should contain 'Begin your output IMMEDIATELY with the [HOOK] tag' instruction.\n"
+            f"Actual system prompt:\n{system_prompt}"
+        )
+
+    def test_system_prompt_contains_example_filler_phrases(self):
+        """System prompt SHALL contain examples of forbidden filler phrases.
+        
+        **Validates: Requirements 1.1**
+        """
+        builder = PromptBuilder()
+        
+        system_prompt = builder.get_system_prompt()
+        
+        # Verify the system prompt contains examples of forbidden filler
+        forbidden_examples = [
+            "Here is the post:",
+            "Sure!",
+            "Certainly!",
+        ]
+        
+        # At least some forbidden examples should be mentioned
+        examples_found = [
+            example for example in forbidden_examples
+            if example in system_prompt
+        ]
+        
+        assert len(examples_found) >= 2, (
+            f"System prompt should contain at least 2 examples of forbidden filler phrases.\n"
+            f"Expected examples: {forbidden_examples}\n"
+            f"Found examples: {examples_found}\n"
+            f"Actual system prompt:\n{system_prompt}"
+        )
+
+    def test_system_prompt_contains_preambles_warning(self):
+        """System prompt SHALL warn against similar preambles.
+        
+        **Validates: Requirements 1.1**
+        """
+        builder = PromptBuilder()
+        
+        system_prompt = builder.get_system_prompt()
+        
+        # Verify the system prompt warns against similar preambles
+        assert "preamble" in system_prompt.lower(), (
+            "System prompt should mention 'preambles' as forbidden content.\n"
+            f"Actual system prompt:\n{system_prompt}"
+        )
+
+    @given(
+        article=scored_article_strategy(),
+    )
+    @settings(max_examples=100)
+    def test_system_prompt_consistent_across_articles(self, article: ScoredArticle):
+        """For any article, get_system_prompt() SHALL return consistent no-filler instructions.
+        
+        The system prompt is independent of article content, so it should always
+        contain the same no-filler instructions regardless of what article is
+        being processed.
+        
+        **Validates: Requirements 1.1, 1.2**
+        """
+        builder = PromptBuilder()
+        
+        # Get system prompt (independent of article)
+        system_prompt = builder.get_system_prompt()
+        
+        # Verify no-filler instruction is always present
+        assert "NEVER use conversational filler" in system_prompt, (
+            "System prompt should always contain no-filler instruction"
+        )
+        
+        # Verify begin with [HOOK] instruction is always present
+        assert "[HOOK]" in system_prompt, (
+            "System prompt should always reference [HOOK] tag"
+        )
+
+    def test_system_prompt_critical_output_rules_section(self):
+        """System prompt SHALL contain a CRITICAL OUTPUT RULES section.
+        
+        **Validates: Requirements 1.1, 1.2**
+        """
+        builder = PromptBuilder()
+        
+        system_prompt = builder.get_system_prompt()
+        
+        # Verify the system prompt has a critical output rules section
+        assert "CRITICAL OUTPUT RULES" in system_prompt, (
+            "System prompt should contain 'CRITICAL OUTPUT RULES' section.\n"
+            f"Actual system prompt:\n{system_prompt}"
+        )
+
+    def test_system_prompt_no_filler_instruction_is_explicit(self):
+        """The no-filler instruction SHALL be explicit and unambiguous.
+        
+        **Validates: Requirements 1.1**
+        """
+        builder = PromptBuilder()
+        
+        system_prompt = builder.get_system_prompt()
+        
+        # The instruction should use strong language (NEVER, not "avoid" or "try not to")
+        assert "NEVER" in system_prompt, (
+            "System prompt should use strong language (NEVER) for filler prohibition.\n"
+            f"Actual system prompt:\n{system_prompt}"
+        )
+        
+        # The instruction should specifically mention "conversational filler"
+        assert "conversational filler" in system_prompt.lower(), (
+            "System prompt should specifically mention 'conversational filler'.\n"
+            f"Actual system prompt:\n{system_prompt}"
+        )
+
+    def test_system_prompt_hook_tag_instruction_is_explicit(self):
+        """The [HOOK] tag instruction SHALL be explicit and unambiguous.
+        
+        **Validates: Requirements 1.2**
+        """
+        builder = PromptBuilder()
+        
+        system_prompt = builder.get_system_prompt()
+        
+        # The instruction should use strong language (IMMEDIATELY)
+        assert "IMMEDIATELY" in system_prompt, (
+            "System prompt should use strong language (IMMEDIATELY) for [HOOK] tag instruction.\n"
+            f"Actual system prompt:\n{system_prompt}"
+        )
+        
+        # The instruction should reference the [HOOK] tag
+        assert "[HOOK]" in system_prompt, (
+            "System prompt should reference [HOOK] tag.\n"
+            f"Actual system prompt:\n{system_prompt}"
+        )
+
+    @given(
+        num_calls=st.integers(min_value=1, max_value=10),
+    )
+    @settings(max_examples=50)
+    def test_system_prompt_idempotent(self, num_calls: int):
+        """Multiple calls to get_system_prompt() SHALL return identical results.
+        
+        This ensures the no-filler instructions are consistently present across
+        multiple invocations.
+        
+        **Validates: Requirements 1.1, 1.2**
+        """
+        builder = PromptBuilder()
+        
+        # Get system prompt multiple times
+        prompts = [builder.get_system_prompt() for _ in range(num_calls)]
+        
+        # All prompts should be identical
+        first_prompt = prompts[0]
+        for i, prompt in enumerate(prompts[1:], start=2):
+            assert prompt == first_prompt, (
+                f"Call {i} to get_system_prompt() returned different result.\n"
+                f"First call:\n{first_prompt}\n\n"
+                f"Call {i}:\n{prompt}"
+            )
+        
+        # Verify no-filler instruction is present in all
+        for prompt in prompts:
+            assert "NEVER use conversational filler" in prompt
+
+    def test_system_prompt_contains_all_required_no_filler_elements(self):
+        """System prompt SHALL contain all required no-filler elements.
+        
+        This is a comprehensive test that verifies all elements required by
+        Requirements 1.1 and 1.2 are present in the system prompt.
+        
+        **Validates: Requirements 1.1, 1.2**
+        """
+        builder = PromptBuilder()
+        
+        system_prompt = builder.get_system_prompt()
+        
+        # Required elements from Requirement 1.1
+        required_elements_1_1 = [
+            ("NEVER use conversational filler", "No-filler prohibition"),
+            ("Here is the post:", "Example filler phrase 1"),
+            ("Sure!", "Example filler phrase 2"),
+            ("Certainly!", "Example filler phrase 3"),
+        ]
+        
+        # Required elements from Requirement 1.2
+        required_elements_1_2 = [
+            ("Begin your output IMMEDIATELY with the [HOOK] tag", "Begin with [HOOK] instruction"),
+        ]
+        
+        # Check all required elements
+        missing_elements = []
+        
+        for element, description in required_elements_1_1 + required_elements_1_2:
+            if element not in system_prompt:
+                missing_elements.append(f"- {description}: '{element}'")
+        
+        assert len(missing_elements) == 0, (
+            f"System prompt is missing required no-filler elements:\n"
+            + "\n".join(missing_elements) +
+            f"\n\nActual system prompt:\n{system_prompt}"
+        )
+
+
+# =============================================================================
+# Feature: robust-response-parsing, Property 6: Tag Format Instructions Present
+# Validates: Requirements 2.1, 2.2, 2.3, 2.4, 2.5
+# =============================================================================
+
+
+class TestTagFormatInstructionsPresent:
+    """Property tests for tag format instructions presence in prompts.
+    
+    **Property 6: Tag Format Instructions Present**
+    
+    *For any* article input to PromptBuilder.build(), the resulting prompt
+    SHALL contain instructions for all four tag pairs: [HOOK]/[/HOOK],
+    [VALUE]/[/VALUE], [CTA]/[/CTA], [HASHTAGS]/[/HASHTAGS].
+    
+    **Validates: Requirements 2.1, 2.2, 2.3, 2.4, 2.5**
+    """
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_hook_tag_pair_instructions(self, article: ScoredArticle):
+        """For any article, the prompt SHALL contain [HOOK] and [/HOOK] tag instructions.
+        
+        **Validates: Requirements 2.1**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify [HOOK] tag is present
+        assert "[HOOK]" in prompt, (
+            f"Prompt should contain [HOOK] tag instruction.\n"
+            f"Prompt:\n{prompt}"
+        )
+        
+        # Verify [/HOOK] closing tag is present
+        assert "[/HOOK]" in prompt, (
+            f"Prompt should contain [/HOOK] closing tag instruction.\n"
+            f"Prompt:\n{prompt}"
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_value_tag_pair_instructions(self, article: ScoredArticle):
+        """For any article, the prompt SHALL contain [VALUE] and [/VALUE] tag instructions.
+        
+        **Validates: Requirements 2.2**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify [VALUE] tag is present
+        assert "[VALUE]" in prompt, (
+            f"Prompt should contain [VALUE] tag instruction.\n"
+            f"Prompt:\n{prompt}"
+        )
+        
+        # Verify [/VALUE] closing tag is present
+        assert "[/VALUE]" in prompt, (
+            f"Prompt should contain [/VALUE] closing tag instruction.\n"
+            f"Prompt:\n{prompt}"
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_cta_tag_pair_instructions(self, article: ScoredArticle):
+        """For any article, the prompt SHALL contain [CTA] and [/CTA] tag instructions.
+        
+        **Validates: Requirements 2.3**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify [CTA] tag is present
+        assert "[CTA]" in prompt, (
+            f"Prompt should contain [CTA] tag instruction.\n"
+            f"Prompt:\n{prompt}"
+        )
+        
+        # Verify [/CTA] closing tag is present
+        assert "[/CTA]" in prompt, (
+            f"Prompt should contain [/CTA] closing tag instruction.\n"
+            f"Prompt:\n{prompt}"
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_hashtags_tag_pair_instructions(self, article: ScoredArticle):
+        """For any article, the prompt SHALL contain [HASHTAGS] and [/HASHTAGS] tag instructions.
+        
+        **Validates: Requirements 2.4**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify [HASHTAGS] tag is present
+        assert "[HASHTAGS]" in prompt, (
+            f"Prompt should contain [HASHTAGS] tag instruction.\n"
+            f"Prompt:\n{prompt}"
+        )
+        
+        # Verify [/HASHTAGS] closing tag is present
+        assert "[/HASHTAGS]" in prompt, (
+            f"Prompt should contain [/HASHTAGS] closing tag instruction.\n"
+            f"Prompt:\n{prompt}"
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_output_format_section(self, article: ScoredArticle):
+        """For any article, the prompt SHALL contain an OUTPUT FORMAT section.
+        
+        **Validates: Requirements 2.5**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify OUTPUT FORMAT section is present
+        assert "OUTPUT FORMAT" in prompt, (
+            f"Prompt should contain 'OUTPUT FORMAT' section.\n"
+            f"Prompt:\n{prompt}"
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_contains_all_four_tag_pairs(self, article: ScoredArticle):
+        """For any article, the prompt SHALL contain all four tag pair instructions.
+        
+        This is a comprehensive test that verifies all tag pairs are present
+        in a single prompt.
+        
+        **Validates: Requirements 2.1, 2.2, 2.3, 2.4, 2.5**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Define all required tag pairs
+        required_tag_pairs = [
+            ("[HOOK]", "[/HOOK]", "HOOK"),
+            ("[VALUE]", "[/VALUE]", "VALUE"),
+            ("[CTA]", "[/CTA]", "CTA"),
+            ("[HASHTAGS]", "[/HASHTAGS]", "HASHTAGS"),
+        ]
+        
+        # Check all tag pairs are present
+        missing_tags = []
+        
+        for open_tag, close_tag, tag_name in required_tag_pairs:
+            if open_tag not in prompt:
+                missing_tags.append(f"- Opening tag {open_tag} for {tag_name}")
+            if close_tag not in prompt:
+                missing_tags.append(f"- Closing tag {close_tag} for {tag_name}")
+        
+        assert len(missing_tags) == 0, (
+            f"Prompt is missing required tag instructions:\n"
+            + "\n".join(missing_tags) +
+            f"\n\nPrompt:\n{prompt}"
+        )
+        
+        # Also verify OUTPUT FORMAT section is present
+        assert "OUTPUT FORMAT" in prompt, (
+            f"Prompt should contain 'OUTPUT FORMAT' section.\n"
+            f"Prompt:\n{prompt}"
+        )
+
+    def test_tag_format_instructions_are_explicit_examples(self):
+        """Tag format instructions SHALL include explicit examples of tag usage.
+        
+        The prompt should show the model exactly how to format output with tags,
+        not just mention the tags abstractly.
+        
+        **Validates: Requirements 2.1, 2.2, 2.3, 2.4, 2.5**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title="Test Article",
+            source="AWS News Blog",
+            summary="Test summary content",
+            key_topics=["cloud_security"],
+            why_it_matters="Test importance",
+            hashtags=["#Test"],
+        )
+        
+        # Verify the prompt contains example tag usage patterns
+        # The OUTPUT FORMAT section should show tags with example content
+        assert "[HOOK]" in prompt and "[/HOOK]" in prompt, (
+            "Prompt should contain HOOK tag pair"
+        )
+        assert "[VALUE]" in prompt and "[/VALUE]" in prompt, (
+            "Prompt should contain VALUE tag pair"
+        )
+        assert "[CTA]" in prompt and "[/CTA]" in prompt, (
+            "Prompt should contain CTA tag pair"
+        )
+        assert "[HASHTAGS]" in prompt and "[/HASHTAGS]" in prompt, (
+            "Prompt should contain HASHTAGS tag pair"
+        )
+        
+        # Verify the OUTPUT FORMAT section exists and is marked as mandatory
+        assert "OUTPUT FORMAT" in prompt, (
+            "Prompt should contain OUTPUT FORMAT section"
+        )
+        assert "MANDATORY" in prompt, (
+            "OUTPUT FORMAT section should be marked as MANDATORY"
+        )
+
+    def test_tag_instructions_include_no_text_before_hook_rule(self):
+        """Tag format instructions SHALL include rule to not include text before [HOOK].
+        
+        **Validates: Requirements 2.5**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title="Test Article",
+            source="AWS News Blog",
+            summary="Test summary content",
+            key_topics=["cloud_security"],
+            why_it_matters="Test importance",
+            hashtags=["#Test"],
+        )
+        
+        # Verify the prompt instructs not to include text before [HOOK]
+        assert "Do NOT include any text before [HOOK]" in prompt, (
+            "Prompt should instruct not to include text before [HOOK].\n"
+            f"Prompt:\n{prompt}"
+        )
+
+
+# =============================================================================
+# Feature: robust-response-parsing, Property 4: Old Hook Style Names Excluded
+# Validates: Requirements 4.5
+# =============================================================================
+
+
+class TestOldHookStyleNamesExcluded:
+    """Property tests for old hook style name exclusion.
+    
+    **Property 4: Hook Style Names Present (negative check)**
+    
+    *For any* article input to PromptBuilder.build(), the resulting prompt SHALL NOT
+    contain the old hook style names ("Bold Statement", "Contrarian View", "Fact-Driven").
+    
+    **Validates: Requirements 4.5**
+    """
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_does_not_contain_bold_statement(self, article: ScoredArticle):
+        """For any article, the prompt SHALL NOT contain 'Bold Statement' hook style.
+        
+        **Validates: Requirements 4.5**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify old hook style name is NOT present
+        assert "Bold Statement" not in prompt, (
+            "Prompt should NOT contain old hook style name 'Bold Statement'. "
+            "This style has been replaced with 'Statistic-heavy'."
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_does_not_contain_contrarian_view(self, article: ScoredArticle):
+        """For any article, the prompt SHALL NOT contain 'Contrarian View' hook style.
+        
+        **Validates: Requirements 4.5**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify old hook style name is NOT present
+        assert "Contrarian View" not in prompt, (
+            "Prompt should NOT contain old hook style name 'Contrarian View'. "
+            "This style has been replaced with 'Contrarian'."
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_does_not_contain_fact_driven(self, article: ScoredArticle):
+        """For any article, the prompt SHALL NOT contain 'Fact-Driven' hook style.
+        
+        **Validates: Requirements 4.5**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Verify old hook style name is NOT present
+        assert "Fact-Driven" not in prompt, (
+            "Prompt should NOT contain old hook style name 'Fact-Driven'. "
+            "This style has been replaced with 'Bold Prediction'."
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_does_not_contain_any_old_hook_styles(self, article: ScoredArticle):
+        """For any article, the prompt SHALL NOT contain any of the old hook style names.
+        
+        **Validates: Requirements 4.5**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Define old hook style names that should NOT be present
+        old_hook_styles = [
+            "Bold Statement",
+            "Contrarian View",
+            "Fact-Driven",
+        ]
+        
+        # Verify none of the old hook style names are present
+        found_old_styles = [style for style in old_hook_styles if style in prompt]
+        
+        assert len(found_old_styles) == 0, (
+            f"Prompt should NOT contain any old hook style names. "
+            f"Found: {found_old_styles}. "
+            f"Old styles have been replaced with: 'Statistic-heavy', 'Contrarian', 'Bold Prediction'."
+        )
+
+    @given(article=scored_article_strategy())
+    @settings(max_examples=100)
+    def test_prompt_uses_new_styles_instead_of_old(self, article: ScoredArticle):
+        """For any article, the prompt SHALL use new hook styles instead of old ones.
+        
+        This test verifies that the prompt contains the new hook style names
+        AND does not contain the old hook style names.
+        
+        **Validates: Requirements 4.5**
+        """
+        builder = PromptBuilder()
+        
+        prompt = builder.build(
+            title=article.title,
+            source=article.source,
+            summary=article.summary,
+            key_topics=article.key_topics,
+            why_it_matters=article.why_it_matters,
+            hashtags=article.suggested_hashtags,
+        )
+        
+        # Define old and new hook style names
+        old_hook_styles = ["Bold Statement", "Contrarian View", "Fact-Driven"]
+        new_hook_styles = ["Statistic-heavy", "Contrarian", "Bold Prediction"]
+        
+        # Verify old styles are NOT present
+        for old_style in old_hook_styles:
+            assert old_style not in prompt, (
+                f"Prompt should NOT contain old hook style '{old_style}'"
+            )
+        
+        # Verify new styles ARE present
+        for new_style in new_hook_styles:
+            assert new_style in prompt, (
+                f"Prompt should contain new hook style '{new_style}'"
+            )

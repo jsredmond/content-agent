@@ -17,9 +17,24 @@ Data Models:
 from dataclasses import dataclass
 from datetime import datetime
 import logging
+import re
 
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Regex Patterns for Tag-Based Response Parsing
+# =============================================================================
+
+# Pattern for extracting tagged sections (case-insensitive, multiline)
+TAG_PATTERN = r'\[{tag}\](.*?)\[/{tag}\]'
+
+# Compiled patterns for each section
+HOOK_PATTERN = re.compile(r'\[HOOK\](.*?)\[/HOOK\]', re.IGNORECASE | re.DOTALL)
+VALUE_PATTERN = re.compile(r'\[VALUE\](.*?)\[/VALUE\]', re.IGNORECASE | re.DOTALL)
+CTA_PATTERN = re.compile(r'\[CTA\](.*?)\[/CTA\]', re.IGNORECASE | re.DOTALL)
+HASHTAGS_PATTERN = re.compile(r'\[HASHTAGS\](.*?)\[/HASHTAGS\]', re.IGNORECASE | re.DOTALL)
 
 
 class OllamaConnectionError(Exception):
@@ -497,7 +512,12 @@ Your audience includes CIOs, CISOs, CTOs, and IT Directors in regulated industri
 (finance, healthcare, government, professional services).
 
 Write in a professional yet engaging tone. Be concise and actionable.
-Focus on security-first messaging paired with practical modernization guidance."""
+Focus on security-first messaging paired with practical modernization guidance.
+
+CRITICAL OUTPUT RULES:
+- NEVER use conversational filler like "Here is the post:", "Sure!", "Certainly!", or similar preambles
+- Begin your output IMMEDIATELY with the [HOOK] tag
+- Use the exact tag format specified in the prompt"""
     
     # Hook-Value-CTA template for user prompts (Requirement 5.2)
     HOOK_VALUE_CTA_TEMPLATE: str = """Create a LinkedIn post about the following article using the Hook-Value-CTA framework:
@@ -512,10 +532,11 @@ ARTICLE INFORMATION:
 FRAMEWORK REQUIREMENTS:
 
 1. HOOK (1-2 sentences): Start with ONE of these attention-grabbing techniques:
-   - A thought-provoking question
-   - A surprising statistic or fact
-   - A bold statement or prediction
-   - A relatable pain point
+   - Statistic-heavy: Lead with a compelling number or data point
+   - Contrarian: Challenge conventional wisdom or common assumptions
+   - Bold Prediction: Make a confident forecast about the future
+   
+   IMPORTANT: Avoid starting with a question. Cycle through these hook styles to keep your feed fresh.
 
 2. VALUE (3-5 sentences): Provide the core insight:
    - What's the key announcement or update?
@@ -530,12 +551,31 @@ FRAMEWORK REQUIREMENTS:
 FORMAT REQUIREMENTS:
 - Use line breaks between sections for readability
 - Keep total length under 2800 characters (leave room for hashtags)
-- Include these hashtags at the end: {hashtags}
+- Include EXACTLY 3 hashtags at the end - select the 3 most relevant from: {hashtags}
 - Use emojis sparingly (1-2 max) if they add value
 
 {security_framing}
-OUTPUT FORMAT:
-Return ONLY the post text, ready to copy-paste to LinkedIn."""
+OUTPUT FORMAT (MANDATORY):
+Wrap each section in explicit tags. Do NOT include any text before [HOOK].
+
+[HOOK]
+Your attention-grabbing opening here
+[/HOOK]
+
+[VALUE]
+Your core insight content here
+[/VALUE]
+
+[CTA]
+Your call-to-action here
+[/CTA]
+
+[HASHTAGS]
+#Hashtag1 #Hashtag2 #Hashtag3
+[/HASHTAGS]
+
+HASHTAG REQUIREMENT:
+Include exactly 3 hashtags from: {hashtags}"""
     
     # Security-related topics that trigger security-first framing (Requirement 5.5)
     SECURITY_TOPICS: set[str] = {
@@ -992,7 +1032,7 @@ class ContentGenerator:
     Example:
         >>> generator = ContentGenerator()  # Uses defaults
         >>> generator.model
-        'qwen3-coder:30b'
+        'llama4:scout'
         >>> generator.timeout
         120
         >>> generator.num_ctx
@@ -1000,13 +1040,13 @@ class ContentGenerator:
         
         >>> # Custom configuration
         >>> generator = ContentGenerator(
-        ...     model="llama4:scout",
+        ...     model="qwen3-coder:30b",
         ...     timeout=180,
         ...     max_tokens=8000,
         ...     num_ctx=32768
         ... )
         >>> generator.model
-        'llama4:scout'
+        'qwen3-coder:30b'
         
         >>> # Generate a post from an article
         >>> post = generator.generate(scored_article)
@@ -1014,16 +1054,17 @@ class ContentGenerator:
         
     Requirements:
         - 2.1: Support configuration of the model name via constructor parameter
-        - 2.2: Default to qwen3-coder:30b when no model is specified
+        - 2.2: Default to llama4:scout when no model is specified
         - 6.4: Support configurable timeout values with a default of 120 seconds
         - 3.5: Pass configurable num_ctx parameter to Ollama (default 16384)
     """
     
     # Default configuration values
-    DEFAULT_MODEL: str = "qwen3-coder:30b"
+    DEFAULT_MODEL: str = "llama4:scout"
     DEFAULT_TIMEOUT: int = 120
     DEFAULT_MAX_TOKENS: int = 10000
     DEFAULT_NUM_CTX: int = 16384
+    MIN_SCORE_THRESHOLD: float = 50.0
     
     def __init__(
         self,
@@ -1040,7 +1081,7 @@ class ContentGenerator:
         
         Args:
             model: Ollama model name to use for generation. Defaults to
-                  "qwen3-coder:30b" which provides a good balance of speed
+                  "llama4:scout" which provides a good balance of speed
                   and quality for LinkedIn post generation.
             timeout: Request timeout in seconds for Ollama API calls.
                     Defaults to 120 seconds to allow for longer generations.
@@ -1055,7 +1096,7 @@ class ContentGenerator:
             >>> # Use default configuration
             >>> generator = ContentGenerator()
             >>> generator.model
-            'qwen3-coder:30b'
+            'llama4:scout'
             >>> generator.timeout
             120
             >>> generator.max_tokens
@@ -1065,24 +1106,24 @@ class ContentGenerator:
             
             >>> # Custom configuration for creative writing
             >>> generator = ContentGenerator(
-            ...     model="llama4:scout",
+            ...     model="qwen3-coder:30b",
             ...     timeout=180,
             ...     max_tokens=8000,
             ...     num_ctx=32768
             ... )
             >>> generator.model
-            'llama4:scout'
+            'qwen3-coder:30b'
             
             >>> # Faster generation with smaller context
             >>> generator = ContentGenerator(
-            ...     model="qwen3-coder:30b",
+            ...     model="llama4:scout",
             ...     timeout=60,
             ...     num_ctx=8192
             ... )
             
         Requirements:
             - 2.1: Support configuration of the model name via constructor parameter
-            - 2.2: Default to qwen3-coder:30b when no model is specified
+            - 2.2: Default to llama4:scout when no model is specified
             - 6.4: Support configurable timeout values with a default of 120 seconds
             - 3.5: Pass configurable num_ctx parameter to Ollama (default 16384)
         """
@@ -1332,12 +1373,176 @@ class ContentGenerator:
             # Wrap any other exceptions in GenerationError
             raise GenerationError(article.title, str(e))
     
+    def _extract_tagged_section(self, response: str, tag: str) -> str | None:
+        """Extract content between [TAG] and [/TAG] markers.
+        
+        Uses the compiled regex patterns to extract content from tagged sections
+        in the LLM response. The extraction is case-insensitive and handles
+        multiline content within tags.
+        
+        Args:
+            response: The full response text from the LLM.
+            tag: The tag name (e.g., "HOOK", "VALUE", "CTA", "HASHTAGS").
+            
+        Returns:
+            The content between tags with whitespace stripped, or None if
+            tags are not found in the response.
+            
+        Example:
+            >>> response = "[HOOK]Attention grabber here[/HOOK]"
+            >>> generator._extract_tagged_section(response, "HOOK")
+            'Attention grabber here'
+            >>> generator._extract_tagged_section(response, "VALUE")
+            None
+            
+        Requirements:
+            - 3.1: Extract hook section using regex between [HOOK] and [/HOOK] tags
+            - 3.2: Extract value section using regex between [VALUE] and [/VALUE] tags
+            - 3.3: Extract CTA section using regex between [CTA] and [/CTA] tags
+            - 3.4: Extract hashtags using regex between [HASHTAGS] and [/HASHTAGS] tags
+        """
+        if not response:
+            return None
+        
+        # Map tag names to compiled patterns
+        tag_patterns = {
+            "HOOK": HOOK_PATTERN,
+            "VALUE": VALUE_PATTERN,
+            "CTA": CTA_PATTERN,
+            "HASHTAGS": HASHTAGS_PATTERN,
+        }
+        
+        # Get the pattern for the requested tag (case-insensitive lookup)
+        tag_upper = tag.upper()
+        pattern = tag_patterns.get(tag_upper)
+        
+        if pattern is None:
+            # For unknown tags, dynamically create a pattern using TAG_PATTERN template
+            dynamic_pattern = re.compile(
+                TAG_PATTERN.format(tag=tag_upper),
+                re.IGNORECASE | re.DOTALL
+            )
+            pattern = dynamic_pattern
+        
+        # Search for the pattern in the response
+        match = pattern.search(response)
+        
+        if match:
+            # Extract the content and strip whitespace
+            content = match.group(1)
+            return content.strip() if content else ""
+        
+        return None
+    
     def _parse_response(self, response: str) -> tuple[str, str, str]:
         """Parse the LLM response into hook, value, and cta sections.
         
-        Attempts to identify the three sections of a Hook-Value-CTA post from
-        the generated text. Uses paragraph breaks and content analysis to
-        separate the sections.
+        Uses regex to extract content between explicit tags. Falls back to
+        paragraph-based parsing if tags are not present.
+        
+        The parsing strategy:
+        1. Strip any conversational filler before the first [HOOK] tag
+        2. Try regex extraction for each section ([HOOK], [VALUE], [CTA])
+        3. Fall back to paragraph-based parsing for any missing sections
+        
+        Args:
+            response: The raw text response from the LLM.
+            
+        Returns:
+            A tuple of (hook, value, cta) strings.
+            
+        Example:
+            >>> hook, value, cta = generator._parse_response(response_text)
+            >>> len(hook) > 0 and len(value) > 0 and len(cta) > 0
+            True
+            
+        Requirements:
+            - 3.5: Fall back to paragraph-based parsing if tags missing
+            - 3.6: Strip conversational filler before first [HOOK] tag
+            - 5.2: Fall back to paragraph-based parsing when tags absent
+            - 5.3: Continue to return valid results regardless of tag presence
+        """
+        if not response:
+            return "", "", ""
+        
+        # Strip conversational filler before the first [HOOK] tag (Requirement 3.6)
+        text = self._strip_filler_before_hook(response)
+        
+        # Try regex extraction first for each section (Requirements 3.1-3.4)
+        hook = self._extract_tagged_section(text, "HOOK")
+        value = self._extract_tagged_section(text, "VALUE")
+        cta = self._extract_tagged_section(text, "CTA")
+        
+        # Check if any tags are missing and need fallback
+        tags_missing = hook is None or value is None or cta is None
+        
+        if tags_missing:
+            # Log warning about fallback (Requirement 3.5)
+            missing_tags = []
+            if hook is None:
+                missing_tags.append("HOOK")
+            if value is None:
+                missing_tags.append("VALUE")
+            if cta is None:
+                missing_tags.append("CTA")
+            
+            logger.warning(
+                f"Missing tags in response: {', '.join(missing_tags)}. "
+                "Falling back to paragraph-based parsing for missing sections."
+            )
+            
+            # Get fallback values from paragraph-based parsing
+            fallback_hook, fallback_value, fallback_cta = self._parse_response_paragraphs(text)
+            
+            # Use fallback values for missing sections
+            if hook is None:
+                hook = fallback_hook
+            if value is None:
+                value = fallback_value
+            if cta is None:
+                cta = fallback_cta
+        
+        return hook or "", value or "", cta or ""
+    
+    def _strip_filler_before_hook(self, response: str) -> str:
+        """Strip conversational filler that appears before the first [HOOK] tag.
+        
+        Removes common LLM preambles like "Here is the post:", "Sure!", etc.
+        that may appear before the actual content starts.
+        
+        Args:
+            response: The raw response text from the LLM.
+            
+        Returns:
+            The response with any filler before [HOOK] removed.
+            
+        Example:
+            >>> generator._strip_filler_before_hook("Here is the post:\\n\\n[HOOK]Hello[/HOOK]")
+            '[HOOK]Hello[/HOOK]'
+            >>> generator._strip_filler_before_hook("[HOOK]Hello[/HOOK]")
+            '[HOOK]Hello[/HOOK]'
+            
+        Requirements:
+            - 3.6: Strip conversational filler before first [HOOK] tag
+        """
+        if not response:
+            return response
+        
+        # Find the position of the first [HOOK] tag (case-insensitive)
+        hook_match = re.search(r'\[HOOK\]', response, re.IGNORECASE)
+        
+        if hook_match:
+            # Return everything from [HOOK] onwards, stripping filler before it
+            return response[hook_match.start():]
+        
+        # No [HOOK] tag found - return original response for fallback parsing
+        return response
+    
+    def _parse_response_paragraphs(self, response: str) -> tuple[str, str, str]:
+        """Parse the LLM response using paragraph-based splitting.
+        
+        This is the original parsing logic used as a fallback when explicit
+        tags are not present in the response.
         
         The parsing strategy:
         1. Split the response into paragraphs (separated by blank lines)
@@ -1351,10 +1556,8 @@ class ContentGenerator:
         Returns:
             A tuple of (hook, value, cta) strings.
             
-        Example:
-            >>> hook, value, cta = generator._parse_response(response_text)
-            >>> len(hook) > 0 and len(value) > 0 and len(cta) > 0
-            True
+        Requirements:
+            - 5.2: Fall back to paragraph-based parsing when tags absent
         """
         if not response:
             return "", "", ""
@@ -1484,8 +1687,11 @@ class ContentGenerator:
         """Generate posts for multiple articles.
         
         Processes a batch of ScoredArticle objects, generating LinkedIn posts
-        for each one. The method handles errors gracefully, continuing to
-        process remaining articles even if individual generations fail.
+        for each one. Articles with score_overall below MIN_SCORE_THRESHOLD (50)
+        are skipped and not included in the results.
+        
+        The method handles errors gracefully, continuing to process remaining
+        articles even if individual generations fail.
         
         Progress is logged during batch processing to provide visibility into
         the operation's status.
@@ -1500,7 +1706,8 @@ class ContentGenerator:
             A BatchResult object containing:
             - successful: List of successfully generated posts
             - failed: List of (article_title, error_message) tuples for failures
-            - total_processed: Total number of articles attempted
+            - total_processed: Total number of articles that were attempted
+                              (excludes skipped low-score articles)
             - success_rate: Percentage of successful generations (0.0 to 1.0)
             
         Raises:
@@ -1532,6 +1739,10 @@ class ContentGenerator:
             ...     print(f"  - {title}: {error}")
             
         Requirements:
+            - 3.1: Skip articles with score_overall below 50
+            - 3.2: Log skipped articles
+            - 3.3: Do not include skipped articles in failed list
+            - 3.4: BatchResult reflects only articles that were actually processed
             - 8.1: Provide a batch generation method that accepts a list of ScoredArticle objects
             - 8.2: Continue processing remaining articles if one fails
             - 8.3: Return a list of results with success/failure status for each article
@@ -1541,13 +1752,33 @@ class ContentGenerator:
         # This is done once at the start to fail fast if model is unavailable
         self._validate_model()
         
-        total = len(articles)
+        # Filter articles by score threshold (Requirements 3.1, 3.3, 3.4)
+        eligible_articles = [
+            article for article in articles
+            if article.score_overall >= self.MIN_SCORE_THRESHOLD
+        ]
+        
+        skipped_count = len(articles) - len(eligible_articles)
+        if skipped_count > 0:
+            # Log summary count at INFO level (Requirement 3.2)
+            logger.info(
+                f"Skipped {skipped_count} articles with score_overall < {self.MIN_SCORE_THRESHOLD}"
+            )
+            # Log individual skipped articles at DEBUG level (Requirement 3.2)
+            for article in articles:
+                if article.score_overall < self.MIN_SCORE_THRESHOLD:
+                    logger.debug(
+                        f"Skipped article '{article.title}' "
+                        f"(score_overall={article.score_overall:.1f} < {self.MIN_SCORE_THRESHOLD})"
+                    )
+        
+        total = len(eligible_articles)
         successful: list[GeneratedPost] = []
         failed: list[tuple[str, str]] = []
         
         logger.info(f"Starting batch generation for {total} articles")
         
-        for index, article in enumerate(articles, start=1):
+        for index, article in enumerate(eligible_articles, start=1):
             article_title = article.title
             
             try:
